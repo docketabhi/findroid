@@ -235,13 +235,8 @@ fun NavigationRoot(
             val route: SeasonRoute = backStackEntry.toRoute()
             SeasonScreen(
                 seasonId = UUID.fromString(route.seasonId),
-                navigateToPlayer = { itemId ->
-                    navController.navigate(
-                        PlayerRoute(
-                            itemId = itemId.toString(),
-                            itemKind = BaseItemKind.SEASON.serialName,
-                        )
-                    )
+                navigateToEpisode = { episodeId ->
+                    navController.navigate(EpisodeRoute(episodeId = episodeId.toString()))
                 },
             )
         }

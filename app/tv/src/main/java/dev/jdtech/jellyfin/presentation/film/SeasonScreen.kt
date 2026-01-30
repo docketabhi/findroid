@@ -33,7 +33,7 @@ import java.util.UUID
 @Composable
 fun SeasonScreen(
     seasonId: UUID,
-    navigateToPlayer: (itemId: UUID) -> Unit,
+    navigateToEpisode: (episodeId: UUID) -> Unit,
     viewModel: SeasonViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsState()
@@ -44,7 +44,7 @@ fun SeasonScreen(
         state = state,
         onAction = { action ->
             when (action) {
-                is SeasonAction.NavigateToItem -> navigateToPlayer(action.item.id)
+                is SeasonAction.NavigateToItem -> navigateToEpisode(action.item.id)
                 else -> Unit
             }
         },
