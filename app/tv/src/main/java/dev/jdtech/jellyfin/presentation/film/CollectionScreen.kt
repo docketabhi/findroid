@@ -61,7 +61,7 @@ fun CollectionScreen(
 }
 
 @Composable
-private fun CollectionScreenLayout(
+internal fun CollectionScreenLayout(
     collectionName: String,
     state: CollectionState,
     onAction: (CollectionAction) -> Unit,
