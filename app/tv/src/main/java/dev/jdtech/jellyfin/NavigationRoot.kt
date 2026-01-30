@@ -77,6 +77,16 @@ data class LibraryRoute(
 
 @Serializable data class SettingsSubRoute(val indexes: IntArray)
 
+@Serializable data class EpisodeRoute(val episodeId: String)
+
+@Serializable data class PersonRoute(val personId: String)
+
+@Serializable data class CollectionRoute(val collectionId: String, val collectionName: String)
+
+@Serializable data object FavoritesRoute
+
+@Serializable data object DownloadsRoute
+
 @OptIn(ExperimentalStdlibApi::class)
 @Composable
 fun NavigationRoot(
