@@ -8,9 +8,12 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.toRoute
 import dev.jdtech.jellyfin.models.CollectionType
+import dev.jdtech.jellyfin.models.FindroidBoxSet
+import dev.jdtech.jellyfin.models.FindroidItem
 import dev.jdtech.jellyfin.models.FindroidMovie
 import dev.jdtech.jellyfin.models.FindroidSeason
 import dev.jdtech.jellyfin.models.FindroidShow
+import dev.jdtech.jellyfin.presentation.film.CollectionScreen
 import dev.jdtech.jellyfin.presentation.film.EpisodeScreen
 import dev.jdtech.jellyfin.presentation.film.LibraryScreen
 import dev.jdtech.jellyfin.presentation.film.PersonScreen
@@ -199,6 +202,16 @@ fun NavigationRoot(
                 navigateToShow = { itemId -> navController.navigate(ShowRoute(itemId.toString())) },
             )
         }
+        composable<CollectionRoute> { backStackEntry ->
+            val route: CollectionRoute = backStackEntry.toRoute()
+            CollectionScreen(
+                collectionId = UUID.fromString(route.collectionId),
+                collectionName = route.collectionName,
+                onItemClick = { item ->
+                    navigateToItem(navController = navController, item = item)
+                },
+            )
+        }
         composable<MovieRoute> { backStackEntry ->
             val route: MovieRoute = backStackEntry.toRoute()
             MovieScreen(
@@ -223,6 +236,9 @@ fun NavigationRoot(
                             navController.navigate(SeasonRoute(seasonId = item.id.toString()))
                         }
                     }
+                },
+                navigateToPerson = { personId ->
+                    navController.navigate(PersonRoute(personId = personId.toString()))
                 },
                 navigateToPlayer = { itemId ->
                     navController.navigate(
@@ -301,5 +317,18 @@ fun NavigationRoot(
                 },
             )
         }
+    }
+}
+
+private fun navigateToItem(navController: NavHostController, item: FindroidItem) {
+    when (item) {
+        is FindroidBoxSet ->
+            navController.navigate(
+                CollectionRoute(collectionId = item.id.toString(), collectionName = item.name)
+            )
+        is FindroidMovie -> navController.navigate(MovieRoute(itemId = item.id.toString()))
+        is FindroidShow -> navController.navigate(ShowRoute(itemId = item.id.toString()))
+        is FindroidSeason -> navController.navigate(SeasonRoute(seasonId = item.id.toString()))
+        else -> Unit
     }
 }
