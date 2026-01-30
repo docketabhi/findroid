@@ -8,9 +8,12 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.toRoute
 import dev.jdtech.jellyfin.models.CollectionType
+import dev.jdtech.jellyfin.models.FindroidMovie
 import dev.jdtech.jellyfin.models.FindroidSeason
+import dev.jdtech.jellyfin.models.FindroidShow
 import dev.jdtech.jellyfin.presentation.film.EpisodeScreen
 import dev.jdtech.jellyfin.presentation.film.LibraryScreen
+import dev.jdtech.jellyfin.presentation.film.PersonScreen
 import dev.jdtech.jellyfin.presentation.film.SeasonScreen
 import dev.jdtech.jellyfin.presentation.film.ShowScreen
 import dev.jdtech.jellyfin.presentation.settings.SettingsScreen
@@ -251,6 +254,22 @@ fun NavigationRoot(
                             itemKind = BaseItemKind.EPISODE.serialName,
                         )
                     )
+                },
+            )
+        }
+        composable<PersonRoute> { backStackEntry ->
+            val route: PersonRoute = backStackEntry.toRoute()
+            PersonScreen(
+                personId = UUID.fromString(route.personId),
+                navigateToItem = { item ->
+                    when (item) {
+                        is FindroidMovie -> {
+                            navController.navigate(MovieRoute(itemId = item.id.toString()))
+                        }
+                        is FindroidShow -> {
+                            navController.navigate(ShowRoute(itemId = item.id.toString()))
+                        }
+                    }
                 },
             )
         }
