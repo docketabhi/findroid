@@ -9,6 +9,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.toRoute
 import dev.jdtech.jellyfin.models.CollectionType
 import dev.jdtech.jellyfin.models.FindroidBoxSet
+import dev.jdtech.jellyfin.models.FindroidEpisode
 import dev.jdtech.jellyfin.models.FindroidItem
 import dev.jdtech.jellyfin.models.FindroidMovie
 import dev.jdtech.jellyfin.models.FindroidSeason
@@ -345,6 +346,7 @@ private fun navigateToItem(navController: NavHostController, item: FindroidItem)
         is FindroidMovie -> navController.navigate(MovieRoute(itemId = item.id.toString()))
         is FindroidShow -> navController.navigate(ShowRoute(itemId = item.id.toString()))
         is FindroidSeason -> navController.navigate(SeasonRoute(seasonId = item.id.toString()))
+        is FindroidEpisode -> navController.navigate(EpisodeRoute(episodeId = item.id.toString()))
         else -> Unit
     }
 }
