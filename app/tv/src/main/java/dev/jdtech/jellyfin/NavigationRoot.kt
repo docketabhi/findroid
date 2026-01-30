@@ -14,6 +14,7 @@ import dev.jdtech.jellyfin.models.FindroidMovie
 import dev.jdtech.jellyfin.models.FindroidSeason
 import dev.jdtech.jellyfin.models.FindroidShow
 import dev.jdtech.jellyfin.presentation.film.CollectionScreen
+import dev.jdtech.jellyfin.presentation.film.DownloadsScreen
 import dev.jdtech.jellyfin.presentation.film.EpisodeScreen
 import dev.jdtech.jellyfin.presentation.film.FavoritesScreen
 import dev.jdtech.jellyfin.presentation.film.LibraryScreen
@@ -320,6 +321,13 @@ fun NavigationRoot(
         }
         composable<FavoritesRoute> {
             FavoritesScreen(
+                onItemClick = { item ->
+                    navigateToItem(navController = navController, item = item)
+                },
+            )
+        }
+        composable<DownloadsRoute> {
+            DownloadsScreen(
                 onItemClick = { item ->
                     navigateToItem(navController = navController, item = item)
                 },
