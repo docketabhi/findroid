@@ -15,6 +15,7 @@ import dev.jdtech.jellyfin.models.FindroidSeason
 import dev.jdtech.jellyfin.models.FindroidShow
 import dev.jdtech.jellyfin.presentation.film.CollectionScreen
 import dev.jdtech.jellyfin.presentation.film.EpisodeScreen
+import dev.jdtech.jellyfin.presentation.film.FavoritesScreen
 import dev.jdtech.jellyfin.presentation.film.LibraryScreen
 import dev.jdtech.jellyfin.presentation.film.PersonScreen
 import dev.jdtech.jellyfin.presentation.film.SeasonScreen
@@ -314,6 +315,13 @@ fun NavigationRoot(
                 navigateToServers = { navController.navigate(ServersRoute) },
                 navigateToSubSettings = { indexes ->
                     navController.navigate(SettingsSubRoute(indexes = indexes))
+                },
+            )
+        }
+        composable<FavoritesRoute> {
+            FavoritesScreen(
+                onItemClick = { item ->
+                    navigateToItem(navController = navController, item = item)
                 },
             )
         }
