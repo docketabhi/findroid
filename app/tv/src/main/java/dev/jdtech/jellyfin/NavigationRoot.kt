@@ -9,6 +9,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.toRoute
 import dev.jdtech.jellyfin.models.CollectionType
 import dev.jdtech.jellyfin.models.FindroidSeason
+import dev.jdtech.jellyfin.presentation.film.EpisodeScreen
 import dev.jdtech.jellyfin.presentation.film.LibraryScreen
 import dev.jdtech.jellyfin.presentation.film.SeasonScreen
 import dev.jdtech.jellyfin.presentation.film.ShowScreen
@@ -239,6 +240,20 @@ fun NavigationRoot(
                         PlayerRoute(
                             itemId = itemId.toString(),
                             itemKind = BaseItemKind.SEASON.serialName,
+                        )
+                    )
+                },
+            )
+        }
+        composable<EpisodeRoute> { backStackEntry ->
+            val route: EpisodeRoute = backStackEntry.toRoute()
+            EpisodeScreen(
+                episodeId = UUID.fromString(route.episodeId),
+                navigateToPlayer = { itemId ->
+                    navController.navigate(
+                        PlayerRoute(
+                            itemId = itemId.toString(),
+                            itemKind = BaseItemKind.EPISODE.serialName,
                         )
                     )
                 },
