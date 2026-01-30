@@ -75,6 +75,7 @@ import java.util.UUID
 fun ShowScreen(
     showId: UUID,
     navigateToItem: (item: FindroidItem) -> Unit,
+    navigateToPerson: (personId: UUID) -> Unit,
     navigateToPlayer: (itemId: UUID) -> Unit,
     viewModel: ShowViewModel = hiltViewModel(),
 ) {
@@ -100,6 +101,7 @@ fun ShowScreen(
                     }
                 }
                 is ShowAction.NavigateToItem -> navigateToItem(action.item)
+                is ShowAction.NavigateToPerson -> navigateToPerson(action.personId)
                 else -> Unit
             }
             viewModel.onAction(action)

@@ -8,8 +8,18 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.toRoute
 import dev.jdtech.jellyfin.models.CollectionType
+import dev.jdtech.jellyfin.models.FindroidBoxSet
+import dev.jdtech.jellyfin.models.FindroidEpisode
+import dev.jdtech.jellyfin.models.FindroidItem
+import dev.jdtech.jellyfin.models.FindroidMovie
 import dev.jdtech.jellyfin.models.FindroidSeason
+import dev.jdtech.jellyfin.models.FindroidShow
+import dev.jdtech.jellyfin.presentation.film.CollectionScreen
+import dev.jdtech.jellyfin.presentation.film.DownloadsScreen
+import dev.jdtech.jellyfin.presentation.film.EpisodeScreen
+import dev.jdtech.jellyfin.presentation.film.FavoritesScreen
 import dev.jdtech.jellyfin.presentation.film.LibraryScreen
+import dev.jdtech.jellyfin.presentation.film.PersonScreen
 import dev.jdtech.jellyfin.presentation.film.SeasonScreen
 import dev.jdtech.jellyfin.presentation.film.ShowScreen
 import dev.jdtech.jellyfin.presentation.settings.SettingsScreen
@@ -76,6 +86,16 @@ data class LibraryRoute(
 @Serializable data object SettingsRoute
 
 @Serializable data class SettingsSubRoute(val indexes: IntArray)
+
+@Serializable data class EpisodeRoute(val episodeId: String)
+
+@Serializable data class PersonRoute(val personId: String)
+
+@Serializable data class CollectionRoute(val collectionId: String, val collectionName: String)
+
+@Serializable data object FavoritesRoute
+
+@Serializable data object DownloadsRoute
 
 @OptIn(ExperimentalStdlibApi::class)
 @Composable
@@ -185,6 +205,16 @@ fun NavigationRoot(
                 navigateToShow = { itemId -> navController.navigate(ShowRoute(itemId.toString())) },
             )
         }
+        composable<CollectionRoute> { backStackEntry ->
+            val route: CollectionRoute = backStackEntry.toRoute()
+            CollectionScreen(
+                collectionId = UUID.fromString(route.collectionId),
+                collectionName = route.collectionName,
+                onItemClick = { item ->
+                    navigateToItem(navController = navController, item = item)
+                },
+            )
+        }
         composable<MovieRoute> { backStackEntry ->
             val route: MovieRoute = backStackEntry.toRoute()
             MovieScreen(
@@ -210,6 +240,9 @@ fun NavigationRoot(
                         }
                     }
                 },
+                navigateToPerson = { personId ->
+                    navController.navigate(PersonRoute(personId = personId.toString()))
+                },
                 navigateToPlayer = { itemId ->
                     navController.navigate(
                         PlayerRoute(
@@ -224,13 +257,38 @@ fun NavigationRoot(
             val route: SeasonRoute = backStackEntry.toRoute()
             SeasonScreen(
                 seasonId = UUID.fromString(route.seasonId),
+                navigateToEpisode = { episodeId ->
+                    navController.navigate(EpisodeRoute(episodeId = episodeId.toString()))
+                },
+            )
+        }
+        composable<EpisodeRoute> { backStackEntry ->
+            val route: EpisodeRoute = backStackEntry.toRoute()
+            EpisodeScreen(
+                episodeId = UUID.fromString(route.episodeId),
                 navigateToPlayer = { itemId ->
                     navController.navigate(
                         PlayerRoute(
                             itemId = itemId.toString(),
-                            itemKind = BaseItemKind.SEASON.serialName,
+                            itemKind = BaseItemKind.EPISODE.serialName,
                         )
                     )
+                },
+            )
+        }
+        composable<PersonRoute> { backStackEntry ->
+            val route: PersonRoute = backStackEntry.toRoute()
+            PersonScreen(
+                personId = UUID.fromString(route.personId),
+                navigateToItem = { item ->
+                    when (item) {
+                        is FindroidMovie -> {
+                            navController.navigate(MovieRoute(itemId = item.id.toString()))
+                        }
+                        is FindroidShow -> {
+                            navController.navigate(ShowRoute(itemId = item.id.toString()))
+                        }
+                    }
                 },
             )
         }
@@ -262,5 +320,33 @@ fun NavigationRoot(
                 },
             )
         }
+        composable<FavoritesRoute> {
+            FavoritesScreen(
+                onItemClick = { item ->
+                    navigateToItem(navController = navController, item = item)
+                },
+            )
+        }
+        composable<DownloadsRoute> {
+            DownloadsScreen(
+                onItemClick = { item ->
+                    navigateToItem(navController = navController, item = item)
+                },
+            )
+        }
+    }
+}
+
+private fun navigateToItem(navController: NavHostController, item: FindroidItem) {
+    when (item) {
+        is FindroidBoxSet ->
+            navController.navigate(
+                CollectionRoute(collectionId = item.id.toString(), collectionName = item.name)
+            )
+        is FindroidMovie -> navController.navigate(MovieRoute(itemId = item.id.toString()))
+        is FindroidShow -> navController.navigate(ShowRoute(itemId = item.id.toString()))
+        is FindroidSeason -> navController.navigate(SeasonRoute(seasonId = item.id.toString()))
+        is FindroidEpisode -> navController.navigate(EpisodeRoute(episodeId = item.id.toString()))
+        else -> Unit
     }
 }
