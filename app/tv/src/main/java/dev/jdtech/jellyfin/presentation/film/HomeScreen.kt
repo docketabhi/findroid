@@ -78,15 +78,16 @@ private fun HomeScreenLayout(state: HomeState, onAction: (HomeAction) -> Unit) {
             ),
         verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacings.large),
     ) {
-        state.suggestionsSection?.let { section ->
-            item(key = section.id) {
-                HomeCarousel(
-                    items = section.items,
-                    onAction = onAction,
-                    modifier = Modifier.animateItem().padding(itemsPadding),
-                )
-            }
-        }
+        // Slideshow/Carousel removed for cleaner home screen
+        // state.suggestionsSection?.let { section ->
+        //     item(key = section.id) {
+        //         HomeCarousel(
+        //             items = section.items,
+        //             onAction = onAction,
+        //             modifier = Modifier.animateItem().padding(itemsPadding),
+        //         )
+        //     }
+        // }
         state.resumeSection?.let { section ->
             item(key = section.id) {
                 HomeSection(
