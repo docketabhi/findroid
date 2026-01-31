@@ -20,9 +20,6 @@ android {
 
         versionCode = Versions.APP_CODE
         versionName = Versions.APP_NAME
-
-        // Optimize APK size by including only needed resources
-        resourceConfigurations += listOf("en", "xxhdpi")
     }
 
     buildTypes {
