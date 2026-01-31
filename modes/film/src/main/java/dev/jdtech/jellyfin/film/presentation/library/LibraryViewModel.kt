@@ -44,8 +44,8 @@ constructor(
                 CollectionType.TvShows -> listOf(BaseItemKind.SERIES)
                 CollectionType.BoxSets -> listOf(BaseItemKind.BOX_SET)
                 CollectionType.Music -> listOf(BaseItemKind.MUSIC_ALBUM, BaseItemKind.AUDIO)
-                CollectionType.MusicVideos -> listOf(BaseItemKind.MUSIC_VIDEO)
-                CollectionType.HomeVideos -> listOf(BaseItemKind.VIDEO, BaseItemKind.PHOTO)
+                CollectionType.MusicVideos -> listOf(BaseItemKind.MUSIC_VIDEO, BaseItemKind.VIDEO)
+                CollectionType.HomeVideos -> listOf(BaseItemKind.VIDEO, BaseItemKind.PHOTO, BaseItemKind.MUSIC_VIDEO)
                 CollectionType.Mixed,
                 CollectionType.Folders ->
                     listOf(BaseItemKind.FOLDER, BaseItemKind.MOVIE, BaseItemKind.SERIES)
