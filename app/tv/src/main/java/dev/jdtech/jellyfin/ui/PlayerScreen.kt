@@ -330,24 +330,26 @@ fun VideoPlayerControls(
         
         // Seekbar at bottom with time display
         Column(modifier = Modifier.fillMaxWidth()) {
-            // Time display
-            Row(
-                modifier = Modifier.fillMaxWidth().padding(horizontal = MaterialTheme.spacings.small),
-                horizontalArrangement = Arrangement.SpaceBetween,
-            ) {
-                Text(
-                    text = formatTime(contentCurrentPosition),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurface,
-                )
-                Text(
-                    text = formatTime(player.duration),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurface,
-                )
+            // Time display - only show when duration is valid
+            if (player.duration > 0 && player.duration != androidx.media3.common.C.TIME_UNSET) {
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = MaterialTheme.spacings.small),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                ) {
+                    Text(
+                        text = formatTime(contentCurrentPosition),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurface,
+                    )
+                    Text(
+                        text = formatTime(player.duration),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurface,
+                    )
+                }
+                
+                Spacer(modifier = Modifier.height(MaterialTheme.spacings.small))
             }
-            
-            Spacer(modifier = Modifier.height(MaterialTheme.spacings.small))
             
             // Seekbar
             VideoPlayerSeekBar(
@@ -488,9 +490,20 @@ private fun switchToTrack(player: Player, trackType: Int, trackId: Int) {
 
 // Helper function to format time in HH:MM:SS format
 private fun formatTime(millis: Long): String {
+    // Handle invalid/unknown duration
+    if (millis <= 0 || millis == Long.MAX_VALUE || millis == androidx.media3.common.C.TIME_UNSET) {
+        return "--:--:--"
+    }
+    
     val totalSeconds = millis / 1000
     val hours = totalSeconds / 3600
     val minutes = (totalSeconds % 3600) / 60
     val seconds = totalSeconds % 60
-    return String.format("%02d:%02d:%02d", hours, minutes, seconds)
+    
+    // Show HH:MM:SS format, or MM:SS if less than 1 hour
+    return if (hours > 0) {
+        String.format("%02d:%02d:%02d", hours, minutes, seconds)
+    } else {
+        String.format("%02d:%02d", minutes, seconds)
+    }
 }
