@@ -13,6 +13,7 @@ import kotlinx.coroutines.channels.Channel.Factory.CONFLATED
 import kotlinx.coroutines.flow.consumeAsFlow
 import kotlinx.coroutines.flow.debounce
 
+@androidx.compose.runtime.Stable
 class VideoPlayerState
 internal constructor(@param:IntRange(from = 0) private val hideSeconds: Int) {
     private var _controlsVisible by mutableStateOf(true)

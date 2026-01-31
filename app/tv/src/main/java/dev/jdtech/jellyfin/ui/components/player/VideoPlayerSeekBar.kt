@@ -55,6 +55,13 @@ fun VideoPlayerSeekBar(
     var seekProgress by remember { mutableFloatStateOf(progress) }
     val focusManager = LocalFocusManager.current
 
+    // Optimize: Use derivedStateOf to prevent unnecessary recompositions
+    val displayProgress by remember {
+        androidx.compose.runtime.derivedStateOf {
+            if (isFocused) seekProgress else progress
+        }
+    }
+
     // Update seek progress when not focused
     LaunchedEffect(progress, isFocused) {
         if (!isFocused) {
@@ -132,7 +139,7 @@ fun VideoPlayerSeekBar(
             start = Offset(x = 0f, y = yOffset),
             end =
                 Offset(
-                    x = size.width.times(if (isFocused) seekProgress else progress),
+                    x = size.width.times(displayProgress),
                     y = yOffset,
                 ),
             strokeWidth = size.height.div(2),
@@ -143,7 +150,7 @@ fun VideoPlayerSeekBar(
             radius = size.height.div(2),
             center =
                 Offset(
-                    x = size.width.times(if (isFocused) seekProgress else progress),
+                    x = size.width.times(displayProgress),
                     y = yOffset,
                 ),
         )

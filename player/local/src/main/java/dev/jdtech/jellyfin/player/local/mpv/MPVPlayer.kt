@@ -146,9 +146,14 @@ class MPVPlayer(
         arrayOf("mpv.conf", "subfont.ttf").forEach { fileName ->
             val file = File(mpvDir, fileName)
             if (file.exists()) return@forEach
-            context.assets
-                .open(fileName, AssetManager.ACCESS_STREAMING)
-                .copyTo(FileOutputStream(file))
+            try {
+                context.assets
+                    .open(fileName, AssetManager.ACCESS_STREAMING)
+                    .copyTo(FileOutputStream(file))
+            } catch (e: Exception) {
+                // subfont.ttf is optional - MPV will use system fonts if not available
+                Timber.w("Failed to copy $fileName: ${e.message}")
+            }
         }
         MPVLib.create(context)
 

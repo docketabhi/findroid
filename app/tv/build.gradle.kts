@@ -20,6 +20,9 @@ android {
 
         versionCode = Versions.APP_CODE
         versionName = Versions.APP_NAME
+
+        // Optimize APK size by including only needed resources
+        resourceConfigurations += listOf("en", "xxhdpi")
     }
 
     buildTypes {
@@ -57,7 +60,9 @@ android {
             isEnable = !isBuildingBundle
 
             reset()
-            include("armeabi-v7a", "arm64-v8a", "x86", "x86_64")
+            // Android TV devices are primarily ARM-based, removing x86 for smaller APK
+            include("armeabi-v7a", "arm64-v8a")
+            isUniversalApk = true  // Also generate universal APK for compatibility
         }
     }
 
@@ -71,6 +76,11 @@ android {
     buildFeatures {
         buildConfig = true
         compose = true
+    }
+
+    composeCompiler {
+        enableStrongSkippingMode = true
+        includeSourceInformation = true
     }
 
     packaging { resources { excludes += "/META-INF/{AL2.0,LGPL2.1}" } }
