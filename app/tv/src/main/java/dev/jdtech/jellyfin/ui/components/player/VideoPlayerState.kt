@@ -19,9 +19,21 @@ internal constructor(@param:IntRange(from = 0) private val hideSeconds: Int) {
     val controlsVisible
         get() = _controlsVisible
 
+    private var _suppressShowControls by mutableStateOf(false)
+
     fun showControls(seconds: Int = hideSeconds) {
-        _controlsVisible = true
-        channel.trySend(seconds)
+        if (!_suppressShowControls) {
+            _controlsVisible = true
+            channel.trySend(seconds)
+        }
+    }
+
+    fun hideControls() {
+        _controlsVisible = false
+    }
+
+    fun suppressShowControls(suppress: Boolean) {
+        _suppressShowControls = suppress
     }
 
     private val channel = Channel<Int>(CONFLATED)

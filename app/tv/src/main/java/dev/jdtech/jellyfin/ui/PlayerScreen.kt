@@ -3,11 +3,15 @@ package dev.jdtech.jellyfin.ui
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -23,6 +27,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.painterResource
@@ -34,10 +39,12 @@ import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.media3.common.C
 import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.session.MediaSession
 import androidx.media3.ui.PlayerView
+import android.widget.Toast
 import androidx.tv.material3.Button
 import androidx.tv.material3.ButtonDefaults
 import androidx.tv.material3.Glow
@@ -51,6 +58,7 @@ import dev.jdtech.jellyfin.ui.components.player.VideoPlayerControlsLayout
 import dev.jdtech.jellyfin.ui.components.player.VideoPlayerMediaButton
 import dev.jdtech.jellyfin.ui.components.player.VideoPlayerMediaTitle
 import dev.jdtech.jellyfin.ui.components.player.VideoPlayerOverlay
+import dev.jdtech.jellyfin.ui.components.player.VideoPlayerSeekBar
 import dev.jdtech.jellyfin.ui.components.player.VideoPlayerSeeker
 import dev.jdtech.jellyfin.ui.components.player.VideoPlayerState
 import dev.jdtech.jellyfin.ui.components.player.rememberVideoPlayerState
@@ -167,10 +175,22 @@ fun PlayerScreen(
         }
     }
 
+    // Handle back button
+    androidx.activity.compose.BackHandler(enabled = true) {
+        if (videoPlayerState.controlsVisible) {
+            // If controls are visible, just hide them
+            videoPlayerState.hideControls()
+        } else {
+            // If controls are hidden, stop playback and exit
+            viewModel.player.stop()
+            (context as? android.app.Activity)?.finish()
+        }
+    }
+
     Box(
         modifier =
             Modifier.dPadEvents(exoPlayer = viewModel.player, videoPlayerState = videoPlayerState)
-                .focusable()
+                .focusable(!videoPlayerState.controlsVisible)  // Only focusable when controls are hidden
     ) {
         AndroidView(
             factory = { context ->
@@ -235,6 +255,7 @@ fun VideoPlayerControls(
     focusRequester: FocusRequester,
     // navigator: DestinationsNavigator,
 ) {
+    val context = LocalContext.current
     val onPlayPauseToggle = { shouldPlay: Boolean ->
         if (shouldPlay) {
             player.play()
@@ -243,44 +264,102 @@ fun VideoPlayerControls(
         }
     }
 
-    VideoPlayerControlsLayout(
-        mediaTitle = { VideoPlayerMediaTitle(title = title, subtitle = null) },
-        seeker = {
-            VideoPlayerSeeker(
-                focusRequester = focusRequester,
+    Column(modifier = Modifier.fillMaxWidth()) {
+        // Buttons at top: Play/Pause, Audio, Subtitle
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.Center,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            // Play/Pause button
+            VideoPlayerMediaButton(
+                icon = if (isPlaying) painterResource(id = R.drawable.ic_pause) else painterResource(id = R.drawable.ic_play),
                 state = state,
                 isPlaying = isPlaying,
-                onPlayPauseToggle = onPlayPauseToggle,
-                onSeek = { player.seekTo(player.duration.times(it).toLong()) },
-                contentProgress = contentCurrentPosition.milliseconds,
-                contentDuration = player.duration.milliseconds,
+                onClick = { onPlayPauseToggle(!isPlaying) },
             )
-        },
-        mediaActions = {
-            Row(horizontalArrangement = Arrangement.spacedBy(MaterialTheme.spacings.medium)) {
-                VideoPlayerMediaButton(
-                    icon = painterResource(id = R.drawable.ic_speaker),
-                    state = state,
-                    isPlaying = isPlaying,
-                    onClick = {
-                        // val tracks = getTracks(player, C.TRACK_TYPE_AUDIO)
-                        // navigator.navigate(VideoPlayerTrackSelectorDialogDestination(C.TRACK_TYPE_AUDIO,
-                        // tracks))
-                    },
+            
+            Spacer(modifier = Modifier.width(MaterialTheme.spacings.large))
+            
+            // Audio button
+            VideoPlayerMediaButton(
+                icon = painterResource(id = R.drawable.ic_speaker),
+                state = state,
+                isPlaying = isPlaying,
+                onClick = {
+                    // Cycle through audio tracks
+                    val tracks = getTracks(player, C.TRACK_TYPE_AUDIO)
+                    val currentIndex = tracks.indexOfFirst { it.selected }
+                    val nextIndex = if (currentIndex >= tracks.size - 1) 0 else currentIndex + 1
+                    val nextTrack = tracks[nextIndex]
+                    
+                    if (nextTrack.id >= 0) {
+                        switchToTrack(player, C.TRACK_TYPE_AUDIO, nextTrack.id)
+                        val trackInfo = nextTrack.language ?: nextTrack.label ?: "Audio Track ${nextTrack.id + 1}"
+                        Toast.makeText(context, "Audio: $trackInfo", Toast.LENGTH_SHORT).show()
+                    }
+                },
+            )
+            
+            Spacer(modifier = Modifier.width(MaterialTheme.spacings.medium))
+            
+            // Subtitle button
+            VideoPlayerMediaButton(
+                icon = painterResource(id = R.drawable.ic_closed_caption),
+                state = state,
+                isPlaying = isPlaying,
+                onClick = {
+                    // Cycle through subtitle tracks
+                    val tracks = getTracks(player, C.TRACK_TYPE_TEXT)
+                    val currentIndex = tracks.indexOfFirst { it.selected }
+                    val nextIndex = if (currentIndex >= tracks.size - 1) 0 else currentIndex + 1
+                    val nextTrack = tracks[nextIndex]
+                    
+                    switchToTrack(player, C.TRACK_TYPE_TEXT, nextTrack.id)
+                    val trackInfo = if (nextTrack.id == -1) {
+                        "Subtitles: Off"
+                    } else {
+                        nextTrack.language ?: nextTrack.label ?: "Subtitle Track ${nextTrack.id + 1}"
+                    }
+                    Toast.makeText(context, "Subtitles: $trackInfo", Toast.LENGTH_SHORT).show()
+                },
+            )
+        }
+        
+        Spacer(modifier = Modifier.height(MaterialTheme.spacings.large))
+        
+        // Seekbar at bottom with time display
+        Column(modifier = Modifier.fillMaxWidth()) {
+            // Time display
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = MaterialTheme.spacings.small),
+                horizontalArrangement = Arrangement.SpaceBetween,
+            ) {
+                Text(
+                    text = formatTime(contentCurrentPosition),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurface,
                 )
-                VideoPlayerMediaButton(
-                    icon = painterResource(id = R.drawable.ic_closed_caption),
-                    state = state,
-                    isPlaying = isPlaying,
-                    onClick = {
-                        // val tracks = getTracks(player, C.TRACK_TYPE_TEXT)
-                        // navigator.navigate(VideoPlayerTrackSelectorDialogDestination(C.TRACK_TYPE_TEXT,
-                        // tracks))
-                    },
+                Text(
+                    text = formatTime(player.duration),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurface,
                 )
             }
-        },
-    )
+            
+            Spacer(modifier = Modifier.height(MaterialTheme.spacings.small))
+            
+            // Seekbar
+            VideoPlayerSeekBar(
+                progress = if (player.duration > 0) contentCurrentPosition.toFloat() / player.duration.toFloat() else 0f,
+                onSeek = { seekProgress -> 
+                    player.seekTo((player.duration * seekProgress).toLong())
+                },
+                state = state,
+                focusRequester = focusRequester,
+            )
+        }
+    }
 }
 
 @Composable
@@ -312,16 +391,35 @@ private fun SkipButton(
 }
 
 private fun Modifier.dPadEvents(exoPlayer: Player, videoPlayerState: VideoPlayerState): Modifier =
-    this.handleDPadKeyEvents(
-        onLeft = {},
-        onRight = {},
-        onUp = {},
-        onDown = {},
-        onEnter = {
-            exoPlayer.pause()
-            videoPlayerState.showControls()
-        },
-    )
+    this.onPreviewKeyEvent { keyEvent ->
+        // Only intercept when controls are HIDDEN
+        if (!videoPlayerState.controlsVisible && keyEvent.nativeKeyEvent.action == android.view.KeyEvent.ACTION_UP) {
+            when (keyEvent.nativeKeyEvent.keyCode) {
+                android.view.KeyEvent.KEYCODE_DPAD_UP,
+                android.view.KeyEvent.KEYCODE_SYSTEM_NAVIGATION_UP -> {
+                    // Show controls on UP
+                    videoPlayerState.showControls()
+                    true
+                }
+                android.view.KeyEvent.KEYCODE_DPAD_DOWN,
+                android.view.KeyEvent.KEYCODE_SYSTEM_NAVIGATION_DOWN -> {
+                    // Show controls on DOWN
+                    videoPlayerState.showControls()
+                    true
+                }
+                android.view.KeyEvent.KEYCODE_DPAD_CENTER,
+                android.view.KeyEvent.KEYCODE_ENTER,
+                android.view.KeyEvent.KEYCODE_NUMPAD_ENTER -> {
+                    // Show controls on OK
+                    videoPlayerState.showControls()
+                    true
+                }
+                else -> false
+            }
+        } else {
+            false // Let child elements handle the event when controls are visible
+        }
+    }
 
 @androidx.annotation.OptIn(UnstableApi::class)
 private fun getTracks(player: Player, type: Int): Array<Track> {
@@ -355,4 +453,44 @@ private fun getTracks(player: Player, type: Int): Array<Track> {
             supported = true,
         )
     return arrayOf(noneTrack) + tracks
+}
+
+@androidx.annotation.OptIn(UnstableApi::class)
+private fun switchToTrack(player: Player, trackType: Int, trackId: Int) {
+    val trackGroups = player.currentTracks.groups
+    
+    if (trackId == -1) {
+        // Disable track (for subtitles)
+        player.trackSelectionParameters = player.trackSelectionParameters
+            .buildUpon()
+            .setTrackTypeDisabled(trackType, true)
+            .build()
+    } else {
+        // Enable and select specific track
+        for (groupIndex in 0 until trackGroups.size) {
+            val group = trackGroups[groupIndex]
+            if (group.type == trackType && groupIndex == trackId) {
+                player.trackSelectionParameters = player.trackSelectionParameters
+                    .buildUpon()
+                    .setTrackTypeDisabled(trackType, false)
+                    .setOverrideForType(
+                        androidx.media3.common.TrackSelectionOverride(
+                            group.mediaTrackGroup,
+                            0
+                        )
+                    )
+                    .build()
+                break
+            }
+        }
+    }
+}
+
+// Helper function to format time in HH:MM:SS format
+private fun formatTime(millis: Long): String {
+    val totalSeconds = millis / 1000
+    val hours = totalSeconds / 3600
+    val minutes = (totalSeconds % 3600) / 60
+    val seconds = totalSeconds % 60
+    return String.format("%02d:%02d:%02d", hours, minutes, seconds)
 }

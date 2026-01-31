@@ -26,7 +26,7 @@ class AppPreferences @Inject constructor(val sharedPreferences: SharedPreference
     val playerBrightness = Preference("pref_player_brightness", -1.0f)
 
     // Player - mpv
-    val playerMpv = Preference("pref_player_mpv", false)
+    val playerMpv = Preference("pref_player_mpv", false) // Use ExoPlayer for Dolby passthrough support
     val playerMpvHwdec = Preference("pref_player_mpv_hwdec", "mediacodec")
     val playerMpvVo = Preference("pref_player_mpv_vo", "gpu")
     val playerMpvAo = Preference("pref_player_mpv_ao", "audiotrack")

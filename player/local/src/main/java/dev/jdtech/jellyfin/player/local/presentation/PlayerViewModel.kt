@@ -13,6 +13,7 @@ import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
 import androidx.media3.common.Player
 import androidx.media3.common.TrackSelectionOverride
+import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.trackselection.DefaultTrackSelector
@@ -123,13 +124,14 @@ constructor(
         trackSelector.setParameters(
             trackSelector
                 .buildUponParameters()
-                .setTunnelingEnabled(true)
+                .setTunnelingEnabled(false)  // Disable tunneling to prevent "Unexpected runtime error" with Dolby
                 .setPreferredAudioLanguage(
                     appPreferences.getValue(appPreferences.preferredAudioLanguage)
                 )
                 .setPreferredTextLanguage(
                     appPreferences.getValue(appPreferences.preferredSubtitleLanguage)
                 )
+                .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, true)  // Disable subtitles by default
         )
 
         if (appPreferences.getValue(appPreferences.playerMpv)) {
@@ -152,16 +154,34 @@ constructor(
             val renderersFactory =
                 DefaultRenderersFactory(application)
                     .setExtensionRendererMode(DefaultRenderersFactory.EXTENSION_RENDERER_MODE_ON)
+            
+            // Custom buffer configuration for better streaming and Dolby passthrough
+            val loadControl = DefaultLoadControl.Builder()
+                .setBufferDurationsMs(
+                    60_000,  // min buffer: 1 minute (increased for stability)
+                    300_000, // max buffer: 5 minutes (very large for continuous playback)
+                    10_000,  // buffer for playback: 10 seconds
+                    15_000   // buffer for playback after rebuffer: 15 seconds
+                )
+                .setBackBuffer(
+                    60_000,  // keep 1 minute of already played content
+                    true     // retain back buffer
+                )
+                .setPrioritizeTimeOverSizeThresholds(true)
+                .build()
+            
             player =
                 ExoPlayer.Builder(application, renderersFactory)
                     .setAudioAttributes(audioAttributes, true)
                     .setTrackSelector(trackSelector)
+                    .setLoadControl(loadControl)
                     .setSeekBackIncrementMs(
                         appPreferences.getValue(appPreferences.playerSeekBackInc)
                     )
                     .setSeekForwardIncrementMs(
                         appPreferences.getValue(appPreferences.playerSeekForwardInc)
                     )
+                    .setHandleAudioBecomingNoisy(true)
                     .setPauseAtEndOfMediaItems(true)
                     .build()
         }
