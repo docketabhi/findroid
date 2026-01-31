@@ -5,18 +5,19 @@ enum class CollectionType(val type: String) {
     TvShows("tvshows"),
     HomeVideos("homevideos"),
     Music("music"),
+    MusicVideos("musicvideos"),
     Playlists("playlists"),
     Books("books"),
     LiveTv("livetv"),
     BoxSets("boxsets"),
-    Mixed("null"),
+    Mixed("mixed"),
     Folders("folders"),
     Unknown("unknown");
 
     companion object {
         val defaultValue = Unknown
 
-        val supported = listOf(Movies, TvShows, BoxSets, Mixed, Folders, Music, HomeVideos)
+        val supported = listOf(Movies, TvShows, BoxSets, Mixed, Folders, Music, HomeVideos, MusicVideos)
 
         fun fromString(string: String?): CollectionType {
             if (
