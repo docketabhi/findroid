@@ -14,10 +14,18 @@ import dev.jdtech.jellyfin.settings.domain.AppPreferences
 import dev.jdtech.jellyfin.utils.toView
 import java.util.UUID
 import javax.inject.Inject
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
+import org.jellyfin.sdk.model.api.BaseItemDto
 import timber.log.Timber
 
 @HiltViewModel
@@ -40,119 +48,188 @@ constructor(
     private val uiTextContinueWatching = UiText.StringResource(FilmR.string.continue_watching)
     private val uiTextNextUp = UiText.StringResource(FilmR.string.next_up)
 
-    fun loadData() {
+    private var loadJob: Job? = null
+
+    fun loadData(forceRefresh: Boolean = true) {
+        if (_state.value.isLoading) return
+
         Timber.i("Loading data")
-        viewModelScope.launch(Dispatchers.Default) {
-            _state.emit(_state.value.copy(isLoading = true, error = null))
+        loadJob?.cancel()
+        loadJob = viewModelScope.launch(Dispatchers.IO) {
+            _state.update { it.copy(isLoading = true, error = null) }
             try {
-                appPreferences.getValue(appPreferences.currentServer)?.let { serverId ->
-                    loadServerName(serverId)
+                val showLibrariesFirstRow =
+                    appPreferences.getValue(appPreferences.homeLibrariesFirstRow)
+                val currentServer = appPreferences.getValue(appPreferences.currentServer)
+                val newServer = currentServer?.let { serverId -> database.get(serverId) }
+
+                val (suggestionsSection, resumeSection, nextUpSection, supportedViews) =
+                    coroutineScope {
+                        val suggestionsDeferred =
+                            async {
+                                runCatching { loadSuggestionsData() }
+                                    .getOrElse { e ->
+                                        Timber.w(e, "Failed loading suggestions")
+                                        null
+                                    }
+                            }
+                        val resumeDeferred =
+                            async {
+                                runCatching { loadResumeItemsData() }
+                                    .getOrElse { e ->
+                                        Timber.w(e, "Failed loading resume items")
+                                        null
+                                    }
+                            }
+                        val nextUpDeferred =
+                            async {
+                                runCatching { loadNextUpItemsData() }
+                                    .getOrElse { e ->
+                                        Timber.w(e, "Failed loading next up items")
+                                        null
+                                    }
+                            }
+                        val supportedViewsDeferred =
+                            async {
+                                runCatching { loadSupportedViews() }
+                                    .getOrElse { e ->
+                                        Timber.w(e, "Failed loading supported views")
+                                        emptyList()
+                                    }
+                            }
+                        Quadruple(
+                            suggestionsDeferred.await(),
+                            resumeDeferred.await(),
+                            nextUpDeferred.await(),
+                            supportedViewsDeferred.await(),
+                        )
+                    }
+
+                // Render the first rows early, then continue loading the rest in background.
+                val initialViews = supportedViews.take(INITIAL_VIEWS_BATCH_SIZE)
+                val remainingViews = supportedViews.drop(INITIAL_VIEWS_BATCH_SIZE)
+                val initialViewItems = loadViewsData(initialViews)
+
+                _state.update {
+                    it.copy(
+                        server = newServer,
+                        suggestionsSection = suggestionsSection,
+                        resumeSection = resumeSection,
+                        nextUpSection = nextUpSection,
+                        views = initialViewItems,
+                        showLibrariesFirstRow = showLibrariesFirstRow,
+                        isLoading = false,
+                    )
                 }
 
-                loadSuggestions()
-                loadResumeItems()
-                loadNextUpItems()
-                loadViews()
+                if (remainingViews.isNotEmpty()) {
+                    val additionalViewItems = loadViewsData(remainingViews)
+                    if (additionalViewItems.isNotEmpty()) {
+                        _state.update { state ->
+                            state.copy(
+                                views =
+                                    (state.views + additionalViewItems)
+                                        .distinctBy { viewItem -> viewItem.id }
+                            )
+                        }
+                    }
+                }
             } catch (e: Exception) {
-                _state.emit(_state.value.copy(error = e))
+                _state.update { it.copy(error = e, isLoading = false) }
             }
-            _state.emit(_state.value.copy(isLoading = false))
         }
     }
 
-    private suspend fun loadServerName(serverId: String) {
-        val server = database.get(serverId)
-        if (server != null) {
-            _state.emit(_state.value.copy(server = server))
-        }
-    }
-
-    private suspend fun loadSuggestions() {
-        Timber.i("Loading suggestions")
+    private suspend fun loadSuggestionsData(): HomeItem.Suggestions? {
         if (!appPreferences.getValue(appPreferences.homeSuggestions)) {
-            _state.emit(_state.value.copy(suggestionsSection = null))
-            return
+            return null
         }
 
         val items = repository.getSuggestions()
 
-        val section =
-            if (items.isEmpty()) {
-                null
-            } else {
-                HomeItem.Suggestions(id = uuidSuggestions, items = items)
-            }
-
-        _state.emit(_state.value.copy(suggestionsSection = section))
+        return if (items.isEmpty()) {
+            null
+        } else {
+            HomeItem.Suggestions(id = uuidSuggestions, items = items)
+        }
     }
 
-    private suspend fun loadResumeItems() {
-        Timber.i("Loading resume items")
+    private suspend fun loadResumeItemsData(): HomeItem.Section? {
         if (!appPreferences.getValue(appPreferences.homeContinueWatching)) {
-            _state.emit(_state.value.copy(resumeSection = null))
-            return
+            return null
         }
 
         val resumeItems = repository.getResumeItems()
 
-        val section =
-            if (resumeItems.isEmpty()) {
-                null
-            } else {
-                HomeItem.Section(
-                    HomeSection(uuidContinueWatching, uiTextContinueWatching, resumeItems)
-                )
-            }
-
-        _state.emit(_state.value.copy(resumeSection = section))
+        return if (resumeItems.isEmpty()) {
+            null
+        } else {
+            HomeItem.Section(
+                HomeSection(uuidContinueWatching, uiTextContinueWatching, resumeItems)
+            )
+        }
     }
 
-    private suspend fun loadNextUpItems() {
-        Timber.i("Loading next up items")
+    private suspend fun loadNextUpItemsData(): HomeItem.Section? {
         if (!appPreferences.getValue(appPreferences.homeNextUp)) {
-            _state.emit(_state.value.copy(nextUpSection = null))
-            return
+            return null
         }
 
         val nextUpItems = repository.getNextUp()
 
-        val section =
-            if (nextUpItems.isEmpty()) {
-                null
-            } else {
-                HomeItem.Section(HomeSection(uuidNextUp, uiTextNextUp, nextUpItems))
-            }
-
-        _state.emit(_state.value.copy(nextUpSection = section))
+        return if (nextUpItems.isEmpty()) {
+            null
+        } else {
+            HomeItem.Section(HomeSection(uuidNextUp, uiTextNextUp, nextUpItems))
+        }
     }
 
-    private suspend fun loadViews() {
-        Timber.i("Loading views")
-        val items =
-            if (appPreferences.getValue(appPreferences.homeLatest)) {
-                repository
-                    .getUserViews()
-                    .filter { view ->
-                        CollectionType.fromString(view.collectionType?.serialName) in
-                            CollectionType.supported
-                    }
-                    .map { view -> view to repository.getLatestMedia(view.id) }
-                    .filter { (_, latest) -> latest.isNotEmpty() }
-                    .map { (view, latest) -> view.toView(latest) }
-                    .map { HomeItem.ViewItem(it) }
-            } else {
-                emptyList()
-            }
+    private suspend fun loadSupportedViews(): List<BaseItemDto> {
+        if (!appPreferences.getValue(appPreferences.homeLatest)) return emptyList()
 
-        _state.emit(_state.value.copy(views = items))
+        return repository.getUserViews().filter { view ->
+            CollectionType.fromString(view.collectionType?.serialName) in CollectionType.supported
+        }
+    }
+
+    private suspend fun loadViewsData(views: List<BaseItemDto>): List<HomeItem.ViewItem> {
+        if (views.isEmpty()) return emptyList()
+
+        val semaphore = Semaphore(VIEW_FETCH_PARALLELISM)
+        return coroutineScope {
+            views.map { view ->
+                async {
+                    semaphore.withPermit {
+                        val latest =
+                            runCatching { repository.getLatestMedia(view.id) }
+                                .getOrElse { e ->
+                                    Timber.w(e, "Failed loading latest for view=${view.id}")
+                                    emptyList()
+                                }
+                        if (latest.isEmpty()) {
+                            null
+                        } else {
+                            HomeItem.ViewItem(view.toView(latest))
+                        }
+                    }
+                }
+            }.awaitAll().filterNotNull()
+        }
     }
 
     fun onAction(action: HomeAction) {
         when (action) {
             is HomeAction.OnRetryClick -> {
-                loadData()
+                loadData(forceRefresh = true)
             }
             else -> Unit
         }
     }
+
+    private companion object {
+        private const val INITIAL_VIEWS_BATCH_SIZE = 2
+        private const val VIEW_FETCH_PARALLELISM = 3
+    }
 }
+
+private data class Quadruple<A, B, C, D>(val first: A, val second: B, val third: C, val fourth: D)

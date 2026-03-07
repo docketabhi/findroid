@@ -28,12 +28,22 @@ suspend fun BaseItemDto.toFindroidItem(
     serverDatabase: ServerDatabaseDao? = null,
 ): FindroidItem? {
     return when (type) {
-        BaseItemKind.MOVIE -> toFindroidMovie(jellyfinRepository, serverDatabase)
+        BaseItemKind.MOVIE,
+        BaseItemKind.VIDEO,
+        BaseItemKind.MUSIC_VIDEO,
+        BaseItemKind.AUDIO,
+        BaseItemKind.TRAILER ->
+            toFindroidMovie(jellyfinRepository, serverDatabase)
         BaseItemKind.EPISODE -> toFindroidEpisode(jellyfinRepository)
         BaseItemKind.SEASON -> toFindroidSeason(jellyfinRepository)
         BaseItemKind.SERIES -> toFindroidShow(jellyfinRepository)
         BaseItemKind.BOX_SET -> toFindroidBoxSet(jellyfinRepository)
-        BaseItemKind.FOLDER -> toFindroidFolder(jellyfinRepository)
+        BaseItemKind.FOLDER,
+        BaseItemKind.MUSIC_ALBUM,
+        BaseItemKind.MUSIC_ARTIST,
+        BaseItemKind.PHOTO,
+        BaseItemKind.PHOTO_ALBUM ->
+            toFindroidFolder(jellyfinRepository)
         else -> null
     }
 }

@@ -43,12 +43,39 @@ constructor(
                 CollectionType.Movies -> listOf(BaseItemKind.MOVIE)
                 CollectionType.TvShows -> listOf(BaseItemKind.SERIES)
                 CollectionType.BoxSets -> listOf(BaseItemKind.BOX_SET)
-                CollectionType.Music -> listOf(BaseItemKind.MUSIC_ALBUM, BaseItemKind.AUDIO)
-                CollectionType.MusicVideos -> listOf(BaseItemKind.MUSIC_VIDEO, BaseItemKind.VIDEO)
-                CollectionType.HomeVideos -> listOf(BaseItemKind.VIDEO, BaseItemKind.PHOTO, BaseItemKind.MUSIC_VIDEO)
+                CollectionType.Music ->
+                    listOf(
+                        BaseItemKind.FOLDER,
+                        BaseItemKind.MUSIC_ARTIST,
+                        BaseItemKind.MUSIC_ALBUM,
+                        BaseItemKind.AUDIO,
+                    )
+                CollectionType.MusicVideos ->
+                    listOf(BaseItemKind.FOLDER, BaseItemKind.MUSIC_VIDEO, BaseItemKind.VIDEO)
+                CollectionType.HomeVideos ->
+                    listOf(
+                        BaseItemKind.FOLDER,
+                        BaseItemKind.VIDEO,
+                        BaseItemKind.MOVIE,
+                        BaseItemKind.PHOTO,
+                        BaseItemKind.MUSIC_VIDEO,
+                    )
                 CollectionType.Mixed,
                 CollectionType.Folders ->
-                    listOf(BaseItemKind.FOLDER, BaseItemKind.MOVIE, BaseItemKind.SERIES)
+                    listOf(
+                        BaseItemKind.FOLDER,
+                        BaseItemKind.MOVIE,
+                        BaseItemKind.SERIES,
+                        BaseItemKind.SEASON,
+                        BaseItemKind.EPISODE,
+                        BaseItemKind.BOX_SET,
+                        BaseItemKind.VIDEO,
+                        BaseItemKind.MUSIC_VIDEO,
+                        BaseItemKind.MUSIC_ALBUM,
+                        BaseItemKind.MUSIC_ARTIST,
+                        BaseItemKind.AUDIO,
+                        BaseItemKind.PHOTO,
+                    )
                 else -> null
             }
 

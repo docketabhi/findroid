@@ -8,6 +8,8 @@ import dev.jdtech.jellyfin.models.FindroidItem
 import dev.jdtech.jellyfin.models.FindroidMovie
 import dev.jdtech.jellyfin.models.FindroidSourceType
 import dev.jdtech.jellyfin.models.FindroidSources
+import dev.jdtech.jellyfin.models.SortBy
+import dev.jdtech.jellyfin.models.SortOrder
 import dev.jdtech.jellyfin.player.core.domain.models.ExternalSubtitle
 import dev.jdtech.jellyfin.player.core.domain.models.PlayerChapter
 import dev.jdtech.jellyfin.player.core.domain.models.PlayerItem
@@ -31,16 +33,42 @@ class PlaylistManager @Inject internal constructor(private val repository: Jelly
         itemKind: BaseItemKind,
         mediaSourceIndex: Int? = null,
         startFromBeginning: Boolean = false,
+        queueParentId: UUID? = null,
     ): PlayerItem? {
         Timber.d("Retrieving initial player item")
+        playerItems.clear()
 
         val initialItem =
             when (itemKind) {
-                BaseItemKind.MOVIE -> {
+                BaseItemKind.MOVIE,
+                BaseItemKind.VIDEO,
+                BaseItemKind.MUSIC_VIDEO,
+                BaseItemKind.AUDIO,
+                BaseItemKind.AUDIO_BOOK,
+                BaseItemKind.TRAILER,
+                -> {
                     val movie = repository.getMovie(itemId)
+                    val queueItems =
+                        if (queueParentId == null) {
+                            listOf(movie)
+                        } else {
+                            val includeTypes = queueIncludeTypes(itemKind)
+                            val siblings =
+                                repository
+                                    .getItems(
+                                        parentId = queueParentId,
+                                        includeTypes = includeTypes,
+                                        recursive = false,
+                                        sortBy = SortBy.NAME,
+                                        sortOrder = SortOrder.ASCENDING,
+                                    )
+                                    .filterIsInstance<FindroidMovie>()
+                                    .filter { it.canPlay }
+                            if (siblings.any { it.id == itemId }) siblings else listOf(movie)
+                        }
 
-                    items = listOf(movie)
-                    movie
+                    items = queueItems
+                    queueItems.firstOrNull { it.id == itemId } ?: movie
                 }
                 BaseItemKind.SERIES -> {
                     val nextUpEpisode = repository.getNextUp(itemId).firstOrNull()
@@ -134,8 +162,9 @@ class PlaylistManager @Inject internal constructor(private val repository: Jelly
         val itemIndex = currentItemIndex - 1
         val playerItem =
             when (startItem) {
-                is FindroidMovie -> null
-                is FindroidEpisode -> {
+                is FindroidMovie,
+                is FindroidEpisode,
+                -> {
                     if (currentItemIndex == 0) {
                         null
                     } else {
@@ -168,8 +197,9 @@ class PlaylistManager @Inject internal constructor(private val repository: Jelly
         val itemIndex = currentItemIndex + 1
         val playerItem =
             when (startItem) {
-                is FindroidMovie -> null
-                is FindroidEpisode -> {
+                is FindroidMovie,
+                is FindroidEpisode,
+                -> {
                     if (currentItemIndex == items.lastIndex) {
                         null
                     } else {
@@ -268,6 +298,21 @@ class PlaylistManager @Inject internal constructor(private val repository: Jelly
     private fun List<FindroidChapter>.toPlayerChapters(): List<PlayerChapter> {
         return this.map { chapter ->
             PlayerChapter(startPosition = chapter.startPosition, name = chapter.name)
+        }
+    }
+
+    private fun queueIncludeTypes(itemKind: BaseItemKind): List<BaseItemKind> {
+        return when (itemKind) {
+            BaseItemKind.AUDIO,
+            BaseItemKind.AUDIO_BOOK,
+            -> listOf(BaseItemKind.AUDIO, BaseItemKind.AUDIO_BOOK)
+            else ->
+                listOf(
+                    BaseItemKind.VIDEO,
+                    BaseItemKind.MOVIE,
+                    BaseItemKind.MUSIC_VIDEO,
+                    BaseItemKind.TRAILER,
+                )
         }
     }
 }

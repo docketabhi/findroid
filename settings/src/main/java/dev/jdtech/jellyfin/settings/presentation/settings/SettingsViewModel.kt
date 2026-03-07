@@ -183,6 +183,12 @@ class SettingsViewModel @Inject constructor(private val appPreferences: AppPrefe
                                                     nameStringResource = R.string.home_latest,
                                                     backendPreference = appPreferences.homeLatest,
                                                 ),
+                                                PreferenceSwitch(
+                                                    nameStringResource =
+                                                        R.string.home_libraries_first_row,
+                                                    backendPreference =
+                                                        appPreferences.homeLibrariesFirstRow,
+                                                ),
                                             ),
                                     ),
                                     PreferenceGroup(

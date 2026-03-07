@@ -3,6 +3,7 @@ package dev.jdtech.jellyfin.presentation.film
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
@@ -20,6 +21,7 @@ import dev.jdtech.jellyfin.presentation.theme.FindroidTheme
 @Composable
 fun FavoritesScreen(
     onItemClick: (item: FindroidItem) -> Unit,
+    firstContentFocusRequester: FocusRequester? = null,
     viewModel: FavoritesViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
@@ -29,6 +31,7 @@ fun FavoritesScreen(
     CollectionScreenLayout(
         collectionName = stringResource(CoreR.string.title_favorite),
         state = state,
+        firstContentFocusRequester = firstContentFocusRequester,
         onAction = { action ->
             when (action) {
                 is CollectionAction.OnItemClick -> onItemClick(action.item)

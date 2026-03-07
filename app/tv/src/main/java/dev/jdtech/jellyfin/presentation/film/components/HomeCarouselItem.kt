@@ -1,7 +1,6 @@
 package dev.jdtech.jellyfin.presentation.film.components
 
 import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -9,6 +8,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.background
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -61,9 +61,10 @@ fun HomeCarouselItem(item: FindroidItem, onAction: (HomeAction) -> Unit) {
                 contentScale = ContentScale.Crop,
                 modifier = Modifier.fillMaxWidth(),
             )
-            Canvas(modifier = Modifier.fillMaxSize()) {
-                drawRect(brush = Brush.verticalGradient(colorStops = colorStops))
-            }
+            Box(
+                modifier =
+                    Modifier.fillMaxSize().background(Brush.verticalGradient(colorStops = colorStops))
+            )
             Column(
                 verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacings.medium),
                 modifier =

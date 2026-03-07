@@ -1,8 +1,12 @@
 package dev.jdtech.jellyfin.player.local.presentation
 
 import android.app.Application
+import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.net.ConnectivityManager
+import android.net.NetworkCapabilities
+import android.net.Uri
 import android.widget.Toast
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
@@ -13,9 +17,19 @@ import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
 import androidx.media3.common.Player
 import androidx.media3.common.TrackSelectionOverride
+import androidx.media3.database.StandaloneDatabaseProvider
+import androidx.media3.datasource.DataSpec
+import androidx.media3.datasource.DefaultDataSource
+import androidx.media3.datasource.DefaultHttpDataSource
+import androidx.media3.datasource.cache.CacheDataSource
+import androidx.media3.datasource.cache.CacheKeyFactory
+import androidx.media3.datasource.cache.LeastRecentlyUsedCacheEvictor
+import androidx.media3.datasource.cache.SimpleCache
 import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
+import androidx.media3.exoplayer.upstream.DefaultBandwidthMeter
 import androidx.media3.exoplayer.trackselection.DefaultTrackSelector
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dev.jdtech.jellyfin.models.FindroidSegment
@@ -24,12 +38,15 @@ import dev.jdtech.jellyfin.player.core.domain.models.PlayerChapter
 import dev.jdtech.jellyfin.player.core.domain.models.PlayerItem
 import dev.jdtech.jellyfin.player.core.domain.models.Trickplay
 import dev.jdtech.jellyfin.player.local.R
+import dev.jdtech.jellyfin.player.local.audio.GainAwareRenderersFactory
 import dev.jdtech.jellyfin.player.local.domain.PlaylistManager
 import dev.jdtech.jellyfin.player.local.mpv.MPVPlayer
 import dev.jdtech.jellyfin.repository.JellyfinRepository
 import dev.jdtech.jellyfin.settings.domain.AppPreferences
 import dev.jdtech.jellyfin.settings.domain.Constants
+import java.io.File
 import java.util.UUID
+import java.util.concurrent.atomic.AtomicInteger
 import javax.inject.Inject
 import kotlin.math.ceil
 import kotlinx.coroutines.DelicateCoroutinesApi
@@ -56,6 +73,28 @@ constructor(
     private val appPreferences: AppPreferences,
     private val savedStateHandle: SavedStateHandle,
 ) : ViewModel(), Player.Listener {
+    private data class BufferProfile(
+        val name: String,
+        val minBufferMs: Int,
+        val maxBufferMs: Int,
+        val playbackBufferMs: Int,
+        val rebufferPlaybackBufferMs: Int,
+        val backBufferMs: Int,
+    )
+
+    companion object {
+        private const val EXO_HTTP_CACHE_SIZE_BYTES = 512L * 1024L * 1024L // 512 MiB
+        private const val LOW_BANDWIDTH_BPS = 5_000_000L
+        private const val HIGH_BANDWIDTH_BPS = 20_000_000L
+        private const val MAX_AUDIO_GAIN_MILLIBEL = 3000
+        private val CACHE_LOCK = Any()
+        private val CACHE_KEY_IGNORED_QUERY_PARAMS =
+            setOf("X-Emby-Token", "api_key", "PlaySessionId", "DeviceId", "StartTimeTicks")
+
+        @Volatile private var exoHttpCache: SimpleCache? = null
+        @Volatile private var exoCacheDbProvider: StandaloneDatabaseProvider? = null
+    }
+
     val player: Player
 
     private val _uiState =
@@ -102,6 +141,7 @@ constructor(
     var playbackSpeed: Float = 1f
 
     var isInPictureInPictureMode: Boolean = false
+    private val softwareGainMilliBel = AtomicInteger(0)
 
     init {
         segmentsSkipButton = appPreferences.getValue(appPreferences.playerMediaSegmentsSkipButton)
@@ -151,27 +191,38 @@ constructor(
                     .setHwDec(appPreferences.getValue(appPreferences.playerMpvHwdec))
                     .build()
         } else {
+            val bandwidthMeter = DefaultBandwidthMeter.Builder(application).build()
+            val bufferProfile = selectBufferProfile(bandwidthMeter.bitrateEstimate)
+
             val renderersFactory =
-                DefaultRenderersFactory(application)
+                GainAwareRenderersFactory(application) { softwareGainMilliBel.get() }
                     .setExtensionRendererMode(DefaultRenderersFactory.EXTENSION_RENDERER_MODE_ON)
-            
-            // Custom buffer configuration for better streaming and Dolby passthrough
+                    .setEnableDecoderFallback(true)
+
             val loadControl = DefaultLoadControl.Builder()
                 .setBufferDurationsMs(
-                    60_000,  // min buffer: 1 minute (increased for stability)
-                    300_000, // max buffer: 5 minutes (very large for continuous playback)
-                    10_000,  // buffer for playback: 10 seconds
-                    15_000   // buffer for playback after rebuffer: 15 seconds
+                    bufferProfile.minBufferMs,
+                    bufferProfile.maxBufferMs,
+                    bufferProfile.playbackBufferMs,
+                    bufferProfile.rebufferPlaybackBufferMs,
                 )
                 .setBackBuffer(
-                    60_000,  // keep 1 minute of already played content
-                    true     // retain back buffer
+                    bufferProfile.backBufferMs,
+                    true,
                 )
                 .setPrioritizeTimeOverSizeThresholds(true)
                 .build()
-            
+
+            Timber.i(
+                "Using ExoPlayer profile=%s, bandwidthEstimate=%d bps",
+                bufferProfile.name,
+                bandwidthMeter.bitrateEstimate,
+            )
+
             player =
                 ExoPlayer.Builder(application, renderersFactory)
+                    .setMediaSourceFactory(createCachedMediaSourceFactory(bandwidthMeter))
+                    .setBandwidthMeter(bandwidthMeter)
                     .setAudioAttributes(audioAttributes, true)
                     .setTrackSelector(trackSelector)
                     .setLoadControl(loadControl)
@@ -187,7 +238,130 @@ constructor(
         }
     }
 
-    fun initializePlayer(itemId: UUID, itemKind: String, startFromBeginning: Boolean) {
+    private fun createCachedMediaSourceFactory(
+        bandwidthMeter: DefaultBandwidthMeter
+    ): DefaultMediaSourceFactory {
+        val httpDataSourceFactory =
+            DefaultHttpDataSource.Factory()
+                .setUserAgent(buildUserAgent())
+                .setAllowCrossProtocolRedirects(true)
+                .setKeepPostFor302Redirects(true)
+                .setConnectTimeoutMs(10_000)
+                .setReadTimeoutMs(20_000)
+
+        val upstreamFactory =
+            DefaultDataSource.Factory(application, httpDataSourceFactory)
+                .setTransferListener(bandwidthMeter)
+        val cacheFactory =
+            CacheDataSource.Factory()
+                .setCache(getOrCreateExoHttpCache())
+                .setUpstreamDataSourceFactory(upstreamFactory)
+                .setCacheKeyFactory(CacheKeyFactory { buildStableCacheKey(it) })
+                .setFlags(CacheDataSource.FLAG_IGNORE_CACHE_ON_ERROR)
+
+        return DefaultMediaSourceFactory(cacheFactory)
+    }
+
+    private fun getOrCreateExoHttpCache(): SimpleCache {
+        exoHttpCache?.let { return it }
+
+        synchronized(CACHE_LOCK) {
+            exoHttpCache?.let { return it }
+            val cacheDir = File(application.filesDir, "exo-http-cache")
+            if (!cacheDir.exists()) {
+                cacheDir.mkdirs()
+            }
+            val databaseProvider =
+                exoCacheDbProvider ?: StandaloneDatabaseProvider(application).also {
+                    exoCacheDbProvider = it
+                }
+
+            return SimpleCache(
+                cacheDir,
+                LeastRecentlyUsedCacheEvictor(EXO_HTTP_CACHE_SIZE_BYTES),
+                databaseProvider,
+            ).also { exoHttpCache = it }
+        }
+    }
+
+    private fun buildUserAgent(): String {
+        val versionName =
+            runCatching {
+                application.packageManager
+                    .getPackageInfo(application.packageName, 0)
+                    .versionName
+            }.getOrDefault("dev")
+        return "FindroidTV/$versionName (Jellyfin; ExoPlayer)"
+    }
+
+    private fun buildStableCacheKey(dataSpec: DataSpec): String {
+        val uri = dataSpec.uri
+        if (!uri.isHierarchical) return uri.toString()
+
+        val cleaned = Uri.Builder().scheme(uri.scheme).authority(uri.authority).path(uri.path)
+        uri.queryParameterNames
+            .sorted()
+            .filterNot { it in CACHE_KEY_IGNORED_QUERY_PARAMS }
+            .forEach { key ->
+                uri.getQueryParameters(key).forEach { value ->
+                    cleaned.appendQueryParameter(key, value)
+                }
+            }
+        return cleaned.build().toString()
+    }
+
+    private fun selectBufferProfile(initialBitrateBps: Long): BufferProfile {
+        val connectivityManager =
+            application.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager
+        val capabilities =
+            connectivityManager?.getNetworkCapabilities(connectivityManager.activeNetwork)
+
+        val isCellular = capabilities?.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR) == true
+        val isEthernet = capabilities?.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET) == true
+        val isUnmetered = capabilities?.hasCapability(NetworkCapabilities.NET_CAPABILITY_NOT_METERED) == true
+
+        val fastStartProfile =
+            BufferProfile(
+                name = "fast-start",
+                minBufferMs = 30_000,
+                maxBufferMs = 180_000,
+                playbackBufferMs = 2_500,
+                rebufferPlaybackBufferMs = 4_000,
+                backBufferMs = 30_000,
+            )
+        val balancedProfile =
+            BufferProfile(
+                name = "balanced",
+                minBufferMs = 60_000,
+                maxBufferMs = 360_000,
+                playbackBufferMs = 2_500,
+                rebufferPlaybackBufferMs = 4_000,
+                backBufferMs = 60_000,
+            )
+        val stableProfile =
+            BufferProfile(
+                name = "stable",
+                minBufferMs = 120_000,
+                maxBufferMs = 600_000,
+                playbackBufferMs = 3_000,
+                rebufferPlaybackBufferMs = 5_000,
+                backBufferMs = 120_000,
+            )
+
+        return when {
+            isCellular -> fastStartProfile
+            initialBitrateBps in 1 until LOW_BANDWIDTH_BPS -> fastStartProfile
+            isEthernet || (isUnmetered && initialBitrateBps >= HIGH_BANDWIDTH_BPS) -> stableProfile
+            else -> balancedProfile
+        }
+    }
+
+    fun initializePlayer(
+        itemId: UUID,
+        itemKind: String,
+        startFromBeginning: Boolean,
+        queueParentId: UUID? = null,
+    ) {
         player.addListener(this)
 
         viewModelScope.launch {
@@ -198,6 +372,7 @@ constructor(
                         itemKind = BaseItemKind.fromName(itemKind),
                         mediaSourceIndex = null,
                         startFromBeginning = startFromBeginning,
+                        queueParentId = queueParentId,
                     )
                 } catch (e: Exception) {
                     Timber.e(e)
@@ -503,6 +678,10 @@ constructor(
     fun selectSpeed(speed: Float) {
         player.setPlaybackSpeed(speed)
         playbackSpeed = speed
+    }
+
+    fun setAudioGain(gainMilliBel: Int) {
+        softwareGainMilliBel.set(gainMilliBel.coerceIn(0, MAX_AUDIO_GAIN_MILLIBEL))
     }
 
     private suspend fun getSegments(itemId: UUID) {

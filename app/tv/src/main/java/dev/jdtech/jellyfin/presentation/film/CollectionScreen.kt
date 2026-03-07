@@ -64,9 +64,12 @@ fun CollectionScreen(
 internal fun CollectionScreenLayout(
     collectionName: String,
     state: CollectionState,
+    firstContentFocusRequester: FocusRequester? = null,
     onAction: (CollectionAction) -> Unit,
 ) {
-    val focusRequester = remember { FocusRequester() }
+    val focusRequester = firstContentFocusRequester ?: remember { FocusRequester() }
+    val firstItemId =
+        state.sections.asSequence().flatMap { section -> section.items.asSequence() }.firstOrNull()?.id
 
     Box(modifier = Modifier.fillMaxSize()) {
         if (state.isLoading) {
@@ -81,7 +84,7 @@ internal fun CollectionScreenLayout(
                         horizontal = MaterialTheme.spacings.default * 2,
                         vertical = MaterialTheme.spacings.large,
                     ),
-                modifier = Modifier.fillMaxSize().focusRequester(focusRequester),
+                modifier = Modifier.fillMaxSize(),
             ) {
                 item(span = { GridItemSpan(this.maxLineSpan) }) {
                     Text(text = collectionName, style = MaterialTheme.typography.displayMedium)
@@ -99,15 +102,21 @@ internal fun CollectionScreenLayout(
                             direction =
                                 if (item is FindroidEpisode) Direction.HORIZONTAL else Direction.VERTICAL,
                             onClick = { onAction(CollectionAction.OnItemClick(item)) },
+                            surfaceModifier =
+                                if (item.id == firstItemId) {
+                                    Modifier.focusRequester(focusRequester)
+                                } else {
+                                    Modifier
+                                },
                             modifier = Modifier.animateItem(),
                         )
                     }
                 }
             }
 
-            LaunchedEffect(state.sections.isNotEmpty()) {
-                if (state.sections.isNotEmpty()) {
-                    focusRequester.requestFocus()
+            LaunchedEffect(firstItemId) {
+                if (firstItemId != null) {
+                    runCatching { focusRequester.requestFocus() }
                 }
             }
         }

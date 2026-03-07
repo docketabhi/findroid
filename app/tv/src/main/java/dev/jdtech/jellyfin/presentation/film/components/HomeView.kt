@@ -7,9 +7,11 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyRow
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.res.stringResource
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
@@ -25,12 +27,13 @@ fun HomeView(
     view: HomeItem.ViewItem,
     itemsPadding: PaddingValues,
     onAction: (HomeAction) -> Unit,
+    firstItemFocusRequester: FocusRequester? = null,
     modifier: Modifier = Modifier,
 ) {
     Column(modifier = modifier) {
         Text(
             text = stringResource(id = FilmR.string.latest_library, view.view.name),
-            style = MaterialTheme.typography.headlineMedium,
+            style = MaterialTheme.typography.titleLarge,
             modifier = Modifier.padding(itemsPadding),
         )
         Spacer(modifier = Modifier.height(MaterialTheme.spacings.medium))
@@ -38,13 +41,22 @@ fun HomeView(
             horizontalArrangement = Arrangement.spacedBy(MaterialTheme.spacings.default),
             contentPadding = itemsPadding,
         ) {
-            items(view.view.items, key = { it.id }) { item ->
+            itemsIndexed(view.view.items, key = { _, item -> item.id }) { index, item ->
                 ItemCard(
                     item = item,
                     direction = Direction.VERTICAL,
+                    cardWidthDp = HOME_VERTICAL_CARD_WIDTH_DP,
                     onClick = { onAction(HomeAction.OnItemClick(it)) },
+                    surfaceModifier =
+                        if (index == 0 && firstItemFocusRequester != null) {
+                            Modifier.focusRequester(firstItemFocusRequester)
+                        } else {
+                            Modifier
+                        },
                 )
             }
         }
     }
 }
+
+private const val HOME_VERTICAL_CARD_WIDTH_DP = 100

@@ -6,6 +6,7 @@ import coil3.PlatformContext
 import coil3.SingletonImageLoader
 import coil3.annotation.ExperimentalCoilApi
 import coil3.disk.DiskCache
+import coil3.memory.MemoryCache
 import coil3.network.cachecontrol.CacheControlCacheStrategy
 import coil3.network.okhttp.OkHttpNetworkFetcherFactory
 import coil3.request.CachePolicy
@@ -23,24 +24,28 @@ class BaseApplication : Application(), SingletonImageLoader.Factory {
 
     @OptIn(ExperimentalCoilApi::class, ExperimentalTime::class)
     override fun newImageLoader(context: PlatformContext): ImageLoader {
+        val configuredDiskCacheBytes =
+            appPreferences.getValue(appPreferences.imageCacheSize) * 1024L * 1024L
+        val effectiveDiskCacheBytes = maxOf(configuredDiskCacheBytes, 256L * 1024L * 1024L)
+
         return ImageLoader.Builder(this)
             .components {
                 add(OkHttpNetworkFetcherFactory(cacheStrategy = { CacheControlCacheStrategy() }))
                 add(SvgDecoder.Factory())
             }
+            .memoryCachePolicy(CachePolicy.ENABLED)
+            .memoryCache { MemoryCache.Builder().maxSizePercent(context, 0.18).build() }
             .diskCachePolicy(
                 if (appPreferences.getValue(appPreferences.imageCache)) CachePolicy.ENABLED
                 else CachePolicy.DISABLED
             )
             .diskCache {
                 DiskCache.Builder()
-                    .directory(context.cacheDir.resolve("image_cache").toOkioPath())
-                    .maxSizeBytes(
-                        appPreferences.getValue(appPreferences.imageCacheSize) * 1024L * 1024
-                    )
+                    .directory(context.filesDir.resolve("image_cache").toOkioPath())
+                    .maxSizeBytes(effectiveDiskCacheBytes)
                     .build()
             }
-            .crossfade(true)
+            .crossfade(false)
             .build()
     }
 }

@@ -7,9 +7,11 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyRow
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import dev.jdtech.jellyfin.film.presentation.home.HomeAction
@@ -23,12 +25,13 @@ fun HomeSection(
     section: HomeSection,
     itemsPadding: PaddingValues,
     onAction: (HomeAction) -> Unit,
+    firstItemFocusRequester: FocusRequester? = null,
     modifier: Modifier = Modifier,
 ) {
     Column(modifier = modifier) {
         Text(
             text = section.name.asString(),
-            style = MaterialTheme.typography.headlineMedium,
+            style = MaterialTheme.typography.titleLarge,
             modifier = Modifier.padding(itemsPadding),
         )
         Spacer(modifier = Modifier.height(MaterialTheme.spacings.medium))
@@ -36,13 +39,22 @@ fun HomeSection(
             horizontalArrangement = Arrangement.spacedBy(MaterialTheme.spacings.default),
             contentPadding = itemsPadding,
         ) {
-            items(section.items, key = { it.id }) { item ->
+            itemsIndexed(section.items, key = { _, item -> item.id }) { index, item ->
                 ItemCard(
                     item = item,
                     direction = Direction.HORIZONTAL,
+                    cardWidthDp = HOME_HORIZONTAL_CARD_WIDTH_DP,
                     onClick = { onAction(HomeAction.OnItemClick(it)) },
+                    surfaceModifier =
+                        if (index == 0 && firstItemFocusRequester != null) {
+                            Modifier.focusRequester(firstItemFocusRequester)
+                        } else {
+                            Modifier
+                        },
                 )
             }
         }
     }
 }
+
+private const val HOME_HORIZONTAL_CARD_WIDTH_DP = 170

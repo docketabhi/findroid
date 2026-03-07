@@ -22,6 +22,8 @@ fun BaseItemDto.toFindroidImages(jellyfinRepository: JellyfinRepository): Findro
             baseUrl
                 .buildUpon()
                 .appendEncodedPath("items/$id/Images/${ImageType.PRIMARY}")
+                .appendQueryParameter("maxWidth", PRIMARY_MAX_WIDTH.toString())
+                .appendQueryParameter("quality", IMAGE_QUALITY.toString())
                 .appendQueryParameter("tag", tag)
                 .build()
         }
@@ -30,6 +32,8 @@ fun BaseItemDto.toFindroidImages(jellyfinRepository: JellyfinRepository): Findro
             baseUrl
                 .buildUpon()
                 .appendEncodedPath("items/$id/Images/${ImageType.BACKDROP}/0")
+                .appendQueryParameter("maxWidth", BACKDROP_MAX_WIDTH.toString())
+                .appendQueryParameter("quality", IMAGE_QUALITY.toString())
                 .appendQueryParameter("tag", tag)
                 .build()
         }
@@ -38,6 +42,8 @@ fun BaseItemDto.toFindroidImages(jellyfinRepository: JellyfinRepository): Findro
             baseUrl
                 .buildUpon()
                 .appendEncodedPath("items/$id/Images/${ImageType.LOGO}")
+                .appendQueryParameter("maxWidth", LOGO_MAX_WIDTH.toString())
+                .appendQueryParameter("quality", IMAGE_QUALITY.toString())
                 .appendQueryParameter("tag", tag)
                 .build()
         }
@@ -46,6 +52,8 @@ fun BaseItemDto.toFindroidImages(jellyfinRepository: JellyfinRepository): Findro
             baseUrl
                 .buildUpon()
                 .appendEncodedPath("items/$seriesId/Images/${ImageType.PRIMARY}")
+                .appendQueryParameter("maxWidth", PRIMARY_MAX_WIDTH.toString())
+                .appendQueryParameter("quality", IMAGE_QUALITY.toString())
                 .appendQueryParameter("tag", tag)
                 .build()
         }
@@ -54,6 +62,8 @@ fun BaseItemDto.toFindroidImages(jellyfinRepository: JellyfinRepository): Findro
             baseUrl
                 .buildUpon()
                 .appendEncodedPath("items/$seriesId/Images/${ImageType.BACKDROP}/0")
+                .appendQueryParameter("maxWidth", BACKDROP_MAX_WIDTH.toString())
+                .appendQueryParameter("quality", IMAGE_QUALITY.toString())
                 .appendQueryParameter("tag", tag)
                 .build()
         }
@@ -62,6 +72,8 @@ fun BaseItemDto.toFindroidImages(jellyfinRepository: JellyfinRepository): Findro
             baseUrl
                 .buildUpon()
                 .appendEncodedPath("items/$seriesId/Images/${ImageType.LOGO}")
+                .appendQueryParameter("maxWidth", LOGO_MAX_WIDTH.toString())
+                .appendQueryParameter("quality", IMAGE_QUALITY.toString())
                 .appendQueryParameter("tag", tag)
                 .build()
         }
@@ -75,6 +87,11 @@ fun BaseItemDto.toFindroidImages(jellyfinRepository: JellyfinRepository): Findro
         showLogo = showLogo,
     )
 }
+
+private const val PRIMARY_MAX_WIDTH = 500
+private const val BACKDROP_MAX_WIDTH = 1280
+private const val LOGO_MAX_WIDTH = 800
+private const val IMAGE_QUALITY = 80
 
 fun FindroidMovieDto.toLocalFindroidImages(itemId: UUID): FindroidImages {
     return FindroidImages(

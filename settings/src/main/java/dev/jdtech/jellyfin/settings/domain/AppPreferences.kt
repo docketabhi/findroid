@@ -20,6 +20,7 @@ class AppPreferences @Inject constructor(val sharedPreferences: SharedPreference
     val homeContinueWatching = Preference<Boolean>("home_continue_watching", true)
     val homeNextUp = Preference<Boolean>("home_next_up", true)
     val homeLatest = Preference<Boolean>("home_latest", true)
+    val homeLibrariesFirstRow = Preference<Boolean>("home_libraries_first_row", true)
     val displayExtraInfo = Preference("pref_display_extra_info", false)
 
     // Player

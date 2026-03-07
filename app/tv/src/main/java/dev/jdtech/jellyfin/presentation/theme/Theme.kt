@@ -29,7 +29,14 @@ fun FindroidTheme(content: @Composable BoxScope.() -> Unit) {
                 Box(
                     modifier =
                         Modifier.background(
-                            Brush.linearGradient(listOf(Color.Black, Color(0xFF001721)))
+                            Brush.verticalGradient(
+                                listOf(
+                                    Color(0xFF000000),
+                                    Color(0xFF141414),
+                                    Color(0xFF141414),
+                                    Color(0xFF0F0F0F),
+                                )
+                            )
                         )
                 ) {
                     content()

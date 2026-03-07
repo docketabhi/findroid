@@ -27,8 +27,8 @@ fun HomeCarousel(
     Carousel(
         itemCount = items.size,
         modifier = modifier.height(300.dp).fillMaxWidth(),
-        contentTransformEndToStart = fadeIn(tween(1000)).togetherWith(fadeOut(tween(1000))),
-        contentTransformStartToEnd = fadeIn(tween(1000)).togetherWith(fadeOut(tween(1000))),
+        contentTransformEndToStart = fadeIn(tween(450)).togetherWith(fadeOut(tween(450))),
+        contentTransformStartToEnd = fadeIn(tween(450)).togetherWith(fadeOut(tween(450))),
     ) { itemIndex ->
         val item = items[itemIndex]
         HomeCarouselItem(item = item, onAction = onAction)

@@ -4,7 +4,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.grid.itemsIndexed
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -31,6 +31,7 @@ import java.util.UUID
 fun MediaScreen(
     navigateToLibrary: (libraryId: UUID, libraryName: String, libraryType: CollectionType) -> Unit,
     isLoading: (Boolean) -> Unit,
+    firstContentFocusRequester: FocusRequester? = null,
     viewModel: MediaViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsState()
@@ -41,6 +42,7 @@ fun MediaScreen(
 
     LibrariesScreenLayout(
         state = state,
+        firstContentFocusRequester = firstContentFocusRequester,
         onAction = { action ->
             when (action) {
                 is MediaAction.OnItemClick -> {
@@ -54,10 +56,18 @@ fun MediaScreen(
 }
 
 @Composable
-private fun LibrariesScreenLayout(state: MediaState, onAction: (MediaAction) -> Unit) {
-    val focusRequester = remember { FocusRequester() }
+private fun LibrariesScreenLayout(
+    state: MediaState,
+    onAction: (MediaAction) -> Unit,
+    firstContentFocusRequester: FocusRequester? = null,
+) {
+    val focusRequester = firstContentFocusRequester ?: remember { FocusRequester() }
 
-    LaunchedEffect(state.libraries) { focusRequester.requestFocus() }
+    LaunchedEffect(state.libraries) {
+        if (state.libraries.isNotEmpty()) {
+            runCatching { focusRequester.requestFocus() }
+        }
+    }
 
     LazyVerticalGrid(
         columns = GridCells.Fixed(3),
@@ -70,13 +80,19 @@ private fun LibrariesScreenLayout(state: MediaState, onAction: (MediaAction) -> 
                 end = MaterialTheme.spacings.large,
                 bottom = MaterialTheme.spacings.large,
             ),
-        modifier = Modifier.focusRequester(focusRequester),
+        modifier = Modifier,
     ) {
-        items(state.libraries, key = { it.id }) { library ->
+        itemsIndexed(state.libraries, key = { _, library -> library.id }) { index, library ->
             ItemCard(
                 item = library,
                 direction = Direction.HORIZONTAL,
                 onClick = { onAction(MediaAction.OnItemClick(library)) },
+                surfaceModifier =
+                    if (index == 0) {
+                        Modifier.focusRequester(focusRequester)
+                    } else {
+                        Modifier
+                    },
             )
         }
     }

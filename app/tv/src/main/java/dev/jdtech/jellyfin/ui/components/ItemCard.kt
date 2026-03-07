@@ -29,6 +29,7 @@ import dev.jdtech.jellyfin.core.presentation.dummy.dummyEpisode
 import dev.jdtech.jellyfin.core.presentation.dummy.dummyMovie
 import dev.jdtech.jellyfin.models.FindroidEpisode
 import dev.jdtech.jellyfin.models.FindroidItem
+import dev.jdtech.jellyfin.models.FindroidMovie
 import dev.jdtech.jellyfin.presentation.theme.FindroidTheme
 import dev.jdtech.jellyfin.presentation.theme.spacings
 
@@ -37,21 +38,28 @@ fun ItemCard(
     item: FindroidItem,
     direction: Direction,
     onClick: (FindroidItem) -> Unit,
+    cardWidthDp: Int? = null,
+    surfaceModifier: Modifier = Modifier,
     modifier: Modifier = Modifier,
 ) {
     val width =
-        when (direction) {
-            Direction.HORIZONTAL -> 260
-            Direction.VERTICAL -> 150
-        }
+        cardWidthDp
+            ?: when (direction) {
+                Direction.HORIZONTAL -> 236
+                Direction.VERTICAL -> 136
+            }
     Column(modifier = modifier.width(width.dp)) {
         Surface(
+            modifier = surfaceModifier,
             onClick = { onClick(item) },
-            shape = ClickableSurfaceDefaults.shape(shape = RoundedCornerShape(10.dp)),
+            shape = ClickableSurfaceDefaults.shape(shape = RoundedCornerShape(4.dp)),
             border =
                 ClickableSurfaceDefaults.border(
                     focusedBorder =
-                        Border(BorderStroke(4.dp, Color.White), shape = RoundedCornerShape(10.dp))
+                        Border(
+                            BorderStroke(3.dp, MaterialTheme.colorScheme.primary),
+                            shape = RoundedCornerShape(4.dp),
+                        )
                 ),
             scale = ClickableSurfaceScale.None,
         ) {
@@ -63,6 +71,13 @@ fun ItemCard(
                         Modifier.align(Alignment.TopEnd).padding(MaterialTheme.spacings.small),
                 )
                 if (direction == Direction.HORIZONTAL) {
+                    val progressFraction =
+                        if (item.runtimeTicks > 0L) {
+                            (item.playbackPositionTicks / item.runtimeTicks.toFloat())
+                                .coerceIn(0f, 1f)
+                        } else {
+                            0f
+                        }
                     Column(
                         modifier =
                             Modifier.align(Alignment.BottomStart)
@@ -72,10 +87,7 @@ fun ItemCard(
                             modifier =
                                 Modifier.height(4.dp)
                                     .width(
-                                        item.playbackPositionTicks
-                                            .div(item.runtimeTicks.toFloat())
-                                            .times(width - 16)
-                                            .dp
+                                        progressFraction.times(width - 16).dp
                                     )
                                     .clip(MaterialTheme.shapes.extraSmall)
                                     .background(MaterialTheme.colorScheme.primary)
@@ -87,7 +99,7 @@ fun ItemCard(
         Spacer(modifier = Modifier.height(MaterialTheme.spacings.small))
         Text(
             text = if (item is FindroidEpisode) item.seriesName else item.name,
-            style = MaterialTheme.typography.titleMedium,
+            style = MaterialTheme.typography.titleSmall,
             maxLines = if (direction == Direction.HORIZONTAL) 1 else 2,
             overflow = TextOverflow.Ellipsis,
         )
@@ -105,7 +117,28 @@ fun ItemCard(
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
+        } else if (item is FindroidMovie) {
+            buildMovieSubtitle(item)?.let { subtitle ->
+                Text(
+                    text = subtitle,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
         }
+    }
+}
+
+private fun buildMovieSubtitle(item: FindroidMovie): String? {
+    val artist = item.albumArtist ?: item.artists.firstOrNull()
+    val album = item.album
+    return when {
+        !artist.isNullOrBlank() && !album.isNullOrBlank() -> "$artist • $album"
+        !artist.isNullOrBlank() -> artist
+        !album.isNullOrBlank() -> album
+        else -> null
     }
 }
 

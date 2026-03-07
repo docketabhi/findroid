@@ -88,6 +88,7 @@ fun VideoPlayerSeeker(
             Spacer(modifier = Modifier.height(MaterialTheme.spacings.small))
             VideoPlayerSeekBar(
                 progress = (contentProgress / contentDuration).toFloat(),
+                durationMs = contentDuration.inWholeMilliseconds,
                 onSeek = onSeek,
                 state = state,
             )

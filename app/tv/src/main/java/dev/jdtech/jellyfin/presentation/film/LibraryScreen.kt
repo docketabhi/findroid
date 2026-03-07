@@ -47,9 +47,13 @@ import dev.jdtech.jellyfin.presentation.theme.FindroidTheme
 import dev.jdtech.jellyfin.presentation.theme.spacings
 import dev.jdtech.jellyfin.ui.components.Direction
 import dev.jdtech.jellyfin.ui.components.ItemCard
+import dev.jdtech.jellyfin.ui.components.MusicListColumnsHeader
+import dev.jdtech.jellyfin.ui.components.MusicListItem
 import java.util.UUID
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flowOf
+import org.jellyfin.sdk.model.api.BaseItemKind
+import org.jellyfin.sdk.model.api.MediaStreamType
 
 @Composable
 fun LibraryScreen(
@@ -59,6 +63,7 @@ fun LibraryScreen(
     navigateToLibrary: (libraryId: UUID, libraryName: String, libraryType: CollectionType) -> Unit,
     navigateToMovie: (itemId: UUID) -> Unit,
     navigateToShow: (itemId: UUID) -> Unit,
+    navigateToPlayer: (itemId: UUID, itemKind: BaseItemKind, queueParentId: UUID?) -> Unit,
     viewModel: LibraryViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsState()
@@ -75,12 +80,24 @@ fun LibraryScreen(
 
     LibraryScreenLayout(
         libraryName = libraryName,
+        libraryType = libraryType,
         state = state,
         onAction = { action ->
             when (action) {
                 is LibraryAction.OnItemClick -> {
                     when (action.item) {
-                        is FindroidMovie -> navigateToMovie(action.item.id)
+                        is FindroidMovie -> {
+                            val movieItem = action.item as FindroidMovie
+                            if (libraryType == CollectionType.Music || libraryType == CollectionType.MusicVideos || libraryType == CollectionType.HomeVideos) {
+                                navigateToPlayer(
+                                    movieItem.id,
+                                    resolvePlayableKind(movieItem, libraryType),
+                                    libraryId,
+                                )
+                            } else {
+                                navigateToMovie(movieItem.id)
+                            }
+                        }
                         is FindroidShow -> navigateToShow(action.item.id)
                         is FindroidFolder ->
                             navigateToLibrary(action.item.id, action.item.name, libraryType)
@@ -96,17 +113,19 @@ fun LibraryScreen(
 @Composable
 private fun LibraryScreenLayout(
     libraryName: String,
+    libraryType: CollectionType,
     state: LibraryState,
     onAction: (LibraryAction) -> Unit,
 ) {
     val focusRequester = remember { FocusRequester() }
 
     val items = state.items.collectAsLazyPagingItems()
+    val isMusicLibrary = libraryType == CollectionType.Music
 
     var showSortByDialog by remember { mutableStateOf(false) }
 
     LazyVerticalGrid(
-        columns = GridCells.Fixed(5),
+        columns = GridCells.Fixed(if (isMusicLibrary) 1 else NON_MUSIC_LIBRARY_GRID_COLUMNS),
         horizontalArrangement = Arrangement.spacedBy(MaterialTheme.spacings.default),
         verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacings.default),
         contentPadding =
@@ -133,15 +152,30 @@ private fun LibraryScreenLayout(
                 }
             }
         }
+        if (isMusicLibrary) {
+            item(span = { GridItemSpan(this.maxLineSpan) }) {
+                MusicListColumnsHeader()
+            }
+        }
         items(items.itemCount) { i ->
             val item = items[i]
             item?.let {
-                ItemCard(
-                    item = item,
-                    direction = Direction.VERTICAL,
-                    onClick = { onAction(LibraryAction.OnItemClick(item)) },
-                    modifier = Modifier.animateItem(),
-                )
+                if (isMusicLibrary) {
+                    MusicListItem(
+                        index = i,
+                        item = item,
+                        onClick = { onAction(LibraryAction.OnItemClick(item)) },
+                        modifier = Modifier.animateItem(),
+                    )
+                } else {
+                    ItemCard(
+                        item = item,
+                        direction = Direction.VERTICAL,
+                        cardWidthDp = LIBRARY_CARD_WIDTH_DP,
+                        onClick = { onAction(LibraryAction.OnItemClick(item)) },
+                        modifier = Modifier.animateItem(),
+                    )
+                }
             }
         }
     }
@@ -164,6 +198,9 @@ private fun LibraryScreenLayout(
     }
 }
 
+private const val NON_MUSIC_LIBRARY_GRID_COLUMNS = 6
+private const val LIBRARY_CARD_WIDTH_DP = 116
+
 @Preview(device = "id:tv_1080p")
 @Composable
 private fun LibraryScreenLayoutPreview() {
@@ -171,8 +208,23 @@ private fun LibraryScreenLayoutPreview() {
     FindroidTheme {
         LibraryScreenLayout(
             libraryName = "Movies",
+            libraryType = CollectionType.Movies,
             state = LibraryState(items = items),
             onAction = {},
         )
+    }
+}
+
+private fun resolvePlayableKind(item: FindroidMovie, libraryType: CollectionType): BaseItemKind {
+    val hasVideoStream =
+        item.sources.any { source ->
+            source.mediaStreams.any { stream -> stream.type == MediaStreamType.VIDEO }
+        }
+
+    return when (libraryType) {
+        CollectionType.Music -> BaseItemKind.AUDIO
+        CollectionType.MusicVideos -> if (hasVideoStream) BaseItemKind.MUSIC_VIDEO else BaseItemKind.AUDIO
+        CollectionType.HomeVideos -> if (hasVideoStream) BaseItemKind.VIDEO else BaseItemKind.AUDIO
+        else -> if (hasVideoStream) BaseItemKind.VIDEO else BaseItemKind.AUDIO
     }
 }

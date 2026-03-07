@@ -15,7 +15,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -24,12 +23,15 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.tv.material3.Icon
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Tab
@@ -65,7 +67,7 @@ fun MainScreen(
     navigateToPlayer: (itemId: UUID, itemKind: BaseItemKind) -> Unit,
     mainViewModel: MainViewModel = hiltViewModel(),
 ) {
-    val delegatedUiState by mainViewModel.uiState.collectAsState()
+    val delegatedUiState by mainViewModel.uiState.collectAsStateWithLifecycle()
 
     LaunchedEffect(true) { mainViewModel.loadServerAndUser() }
 
@@ -100,6 +102,9 @@ private fun MainScreenLayout(
     var activeTabIndex by rememberSaveable { mutableIntStateOf(focusedTabIndex) }
 
     var isLoading by remember { mutableStateOf(false) }
+    val homeFirstContentFocusRequester = remember { FocusRequester() }
+    val librariesFirstContentFocusRequester = remember { FocusRequester() }
+    val favoritesFirstContentFocusRequester = remember { FocusRequester() }
 
     var user: User? = null
     when (uiState) {
@@ -128,7 +133,7 @@ private fun MainScreenLayout(
                     // FocusedTab's indicator
                     PillBorderIndicator(
                         currentTabPosition = tabPositions[focusedTabIndex],
-                        activeBorderColor = Color.White,
+                        activeBorderColor = MaterialTheme.colorScheme.primary,
                         inactiveBorderColor = Color.Transparent,
                         doesTabRowHaveFocus = isActivated,
                     )
@@ -136,12 +141,36 @@ private fun MainScreenLayout(
                     // SelectedTab's indicator
                     TabRowDefaults.PillIndicator(
                         currentTabPosition = tabPositions[activeTabIndex],
-                        activeColor = Color.White,
-                        inactiveColor = Color.White,
+                        activeColor = MaterialTheme.colorScheme.primary,
+                        inactiveColor = MaterialTheme.colorScheme.primary,
                         doesTabRowHaveFocus = isActivated,
                     )
                 },
-                modifier = Modifier.align(Alignment.Center),
+                modifier =
+                    Modifier.align(Alignment.Center).onPreviewKeyEvent { keyEvent ->
+                        if (
+                            keyEvent.nativeKeyEvent.action == android.view.KeyEvent.ACTION_DOWN &&
+                                (
+                                    keyEvent.nativeKeyEvent.keyCode ==
+                                        android.view.KeyEvent.KEYCODE_DPAD_DOWN ||
+                                        keyEvent.nativeKeyEvent.keyCode ==
+                                            android.view.KeyEvent.KEYCODE_SYSTEM_NAVIGATION_DOWN
+                                )
+                        ) {
+                            val activeRequester =
+                                when (activeTabIndex) {
+                                    1 -> homeFirstContentFocusRequester
+                                    2 -> librariesFirstContentFocusRequester
+                                    3 -> favoritesFirstContentFocusRequester
+                                    else -> null
+                                }
+                            activeRequester?.let { requester ->
+                                runCatching { requester.requestFocus() }.isSuccess
+                            } ?: false
+                        } else {
+                            false
+                        }
+                    },
             ) {
                 TabDestination.entries.forEachIndexed { index, tab ->
                     Tab(
@@ -195,14 +224,20 @@ private fun MainScreenLayout(
                     navigateToMovie = navigateToMovie,
                     navigateToShow = navigateToShow,
                     navigateToPlayer = navigateToPlayer,
+                    firstContentFocusRequester = homeFirstContentFocusRequester,
                     isLoading = { isLoading = it },
                 )
             }
             2 -> {
-                MediaScreen(navigateToLibrary = navigateToLibrary, isLoading = { isLoading = it })
+                MediaScreen(
+                    navigateToLibrary = navigateToLibrary,
+                    firstContentFocusRequester = librariesFirstContentFocusRequester,
+                    isLoading = { isLoading = it },
+                )
             }
             3 -> {
                 FavoritesScreen(
+                    firstContentFocusRequester = favoritesFirstContentFocusRequester,
                     onItemClick = { item ->
                         when (item) {
                             is FindroidMovie -> navigateToMovie(item.id)

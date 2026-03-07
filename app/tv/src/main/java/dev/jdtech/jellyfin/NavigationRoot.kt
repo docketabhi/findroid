@@ -81,7 +81,12 @@ data class LibraryRoute(
 
 @Serializable data class SeasonRoute(val seasonId: String)
 
-@Serializable data class PlayerRoute(val itemId: String, val itemKind: String)
+@Serializable
+data class PlayerRoute(
+    val itemId: String,
+    val itemKind: String,
+    val queueParentId: String? = null,
+)
 
 @Serializable data object SettingsRoute
 
@@ -203,6 +208,15 @@ fun NavigationRoot(
                     navController.navigate(MovieRoute(itemId.toString()))
                 },
                 navigateToShow = { itemId -> navController.navigate(ShowRoute(itemId.toString())) },
+                navigateToPlayer = { itemId, itemKind, queueParentId ->
+                    navController.navigate(
+                        PlayerRoute(
+                            itemId = itemId.toString(),
+                            itemKind = itemKind.serialName,
+                            queueParentId = queueParentId?.toString(),
+                        )
+                    )
+                },
             )
         }
         composable<CollectionRoute> { backStackEntry ->
@@ -298,6 +312,8 @@ fun NavigationRoot(
                 itemId = UUID.fromString(route.itemId),
                 itemKind = route.itemKind,
                 startFromBeginning = false,
+                queueParentId = route.queueParentId?.let(UUID::fromString),
+                onNavigateBack = { navController.popBackStack() },
             )
         }
         composable<SettingsRoute> {
