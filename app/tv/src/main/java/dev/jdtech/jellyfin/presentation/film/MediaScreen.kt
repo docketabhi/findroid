@@ -70,7 +70,7 @@ private fun LibrariesScreenLayout(
     }
 
     LazyVerticalGrid(
-        columns = GridCells.Fixed(3),
+        columns = GridCells.Fixed(LIBRARIES_GRID_COLUMNS),
         horizontalArrangement = Arrangement.spacedBy(MaterialTheme.spacings.large),
         verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacings.large),
         contentPadding =
@@ -86,6 +86,7 @@ private fun LibrariesScreenLayout(
             ItemCard(
                 item = library,
                 direction = Direction.HORIZONTAL,
+                cardWidthDp = LIBRARIES_CARD_WIDTH_DP,
                 onClick = { onAction(MediaAction.OnItemClick(library)) },
                 surfaceModifier =
                     if (index == 0) {
@@ -97,6 +98,9 @@ private fun LibrariesScreenLayout(
         }
     }
 }
+
+private const val LIBRARIES_GRID_COLUMNS = 5
+private const val LIBRARIES_CARD_WIDTH_DP = 170
 
 @Preview(device = "id:tv_1080p")
 @Composable

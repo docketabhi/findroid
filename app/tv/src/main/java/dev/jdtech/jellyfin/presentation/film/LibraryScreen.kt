@@ -25,6 +25,7 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
+import androidx.paging.LoadState
 import androidx.paging.PagingData
 import androidx.paging.compose.collectAsLazyPagingItems
 import androidx.tv.material3.Button
@@ -121,18 +122,27 @@ private fun LibraryScreenLayout(
 
     val items = state.items.collectAsLazyPagingItems()
     val isMusicLibrary = libraryType == CollectionType.Music
+    val gridSpacing = if (isMusicLibrary) MaterialTheme.spacings.small else MaterialTheme.spacings.default
+    val gridContentPadding =
+        if (isMusicLibrary) {
+            PaddingValues(
+                horizontal = MaterialTheme.spacings.default * 2,
+                vertical = MaterialTheme.spacings.medium,
+            )
+        } else {
+            PaddingValues(
+                horizontal = MaterialTheme.spacings.default * 2,
+                vertical = MaterialTheme.spacings.large,
+            )
+        }
 
     var showSortByDialog by remember { mutableStateOf(false) }
 
     LazyVerticalGrid(
         columns = GridCells.Fixed(if (isMusicLibrary) 1 else NON_MUSIC_LIBRARY_GRID_COLUMNS),
-        horizontalArrangement = Arrangement.spacedBy(MaterialTheme.spacings.default),
-        verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacings.default),
-        contentPadding =
-            PaddingValues(
-                horizontal = MaterialTheme.spacings.default * 2,
-                vertical = MaterialTheme.spacings.large,
-            ),
+        horizontalArrangement = Arrangement.spacedBy(gridSpacing),
+        verticalArrangement = Arrangement.spacedBy(gridSpacing),
+        contentPadding = gridContentPadding,
         modifier = Modifier.fillMaxSize().focusRequester(focusRequester),
     ) {
         item(span = { GridItemSpan(this.maxLineSpan) }) {
@@ -155,6 +165,15 @@ private fun LibraryScreenLayout(
         if (isMusicLibrary) {
             item(span = { GridItemSpan(this.maxLineSpan) }) {
                 MusicListColumnsHeader()
+            }
+        }
+        if (items.itemCount == 0 && items.loadState.refresh is LoadState.NotLoading && !state.isLoading) {
+            item(span = { GridItemSpan(this.maxLineSpan) }) {
+                Text(
+                    text = stringResource(CoreR.string.library_no_media),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.75f),
+                )
             }
         }
         items(items.itemCount) { i ->

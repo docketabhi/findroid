@@ -16,6 +16,7 @@ import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
+import dev.jdtech.jellyfin.core.R as CoreR
 import dev.jdtech.jellyfin.core.presentation.dummy.dummyHomeSection
 import dev.jdtech.jellyfin.core.presentation.dummy.dummyHomeSuggestions
 import dev.jdtech.jellyfin.core.presentation.dummy.dummyHomeView
@@ -23,6 +24,8 @@ import dev.jdtech.jellyfin.film.R as FilmR
 import dev.jdtech.jellyfin.film.presentation.home.HomeAction
 import dev.jdtech.jellyfin.film.presentation.home.HomeState
 import dev.jdtech.jellyfin.film.presentation.home.HomeViewModel
+import dev.jdtech.jellyfin.models.CollectionType
+import dev.jdtech.jellyfin.models.FindroidCollection
 import dev.jdtech.jellyfin.models.FindroidEpisode
 import dev.jdtech.jellyfin.models.FindroidMovie
 import dev.jdtech.jellyfin.models.FindroidShow
@@ -37,6 +40,7 @@ import org.jellyfin.sdk.model.api.BaseItemKind
 
 @Composable
 fun HomeScreen(
+    navigateToLibrary: (libraryId: UUID, libraryName: String, libraryType: CollectionType) -> Unit,
     navigateToMovie: (itemId: UUID) -> Unit,
     navigateToShow: (itemId: UUID) -> Unit,
     navigateToPlayer: (itemId: UUID, itemKind: BaseItemKind) -> Unit,
@@ -56,14 +60,22 @@ fun HomeScreen(
         onAction = { action ->
             when (action) {
                 is HomeAction.OnItemClick -> {
-                    when (action.item) {
-                        is FindroidMovie -> navigateToMovie(action.item.id)
-                        is FindroidShow -> navigateToShow(action.item.id)
+                    val item = action.item
+                    when (item) {
+                        is FindroidCollection -> navigateToLibrary(item.id, item.name, item.type)
+                        is FindroidMovie -> navigateToMovie(item.id)
+                        is FindroidShow -> navigateToShow(item.id)
                         is FindroidEpisode -> {
-                            navigateToPlayer(action.item.id, BaseItemKind.EPISODE)
+                            navigateToPlayer(item.id, BaseItemKind.EPISODE)
                         }
                     }
                 }
+                is HomeAction.OnLibraryClick ->
+                    navigateToLibrary(
+                        action.library.id,
+                        action.library.name,
+                        action.library.type,
+                    )
                 else -> Unit
             }
             viewModel.onAction(action)
@@ -78,15 +90,14 @@ private fun HomeScreenLayout(
     onAction: (HomeAction) -> Unit,
 ) {
     val itemsPadding = PaddingValues(horizontal = MaterialTheme.spacings.large)
-    val topLibraryView = state.views.firstOrNull()
-    val remainingLibraryViews = state.views.drop(1)
+    val hasLibraries = state.libraries.isNotEmpty()
     val firstViewWithItemsId = state.views.firstOrNull { it.view.items.isNotEmpty() }?.id
     val hasSuggestions = !state.suggestionsSection?.items.isNullOrEmpty()
     val hasResume = !state.resumeSection?.homeSection?.items.isNullOrEmpty()
     val hasNextUp = !state.nextUpSection?.homeSection?.items.isNullOrEmpty()
     val firstFocusTargetKey =
         when {
-            state.showLibrariesFirstRow && firstViewWithItemsId != null -> "view:$firstViewWithItemsId"
+            state.showLibrariesFirstRow && hasLibraries -> "libraries"
             state.showLibrariesFirstRow && hasResume -> "resume"
             hasSuggestions -> "suggestions"
             hasResume -> "resume"
@@ -105,9 +116,10 @@ private fun HomeScreenLayout(
         verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacings.large),
     ) {
         if (
-            state.suggestionsSection == null &&
+                state.suggestionsSection == null &&
                 state.resumeSection == null &&
                 state.nextUpSection == null &&
+                state.libraries.isEmpty() &&
                 state.views.isEmpty() &&
                 !state.isLoading
         ) {
@@ -119,19 +131,21 @@ private fun HomeScreenLayout(
                 )
             }
         }
-        if (state.showLibrariesFirstRow) {
-            topLibraryView?.let { view ->
-                item(key = view.id) {
-                    HomeView(
-                        view = view,
-                        itemsPadding = itemsPadding,
-                        onAction = onAction,
-                        firstItemFocusRequester =
-                            if (firstFocusTargetKey == "view:${view.id}") firstContentFocusRequester
-                            else null,
-                        modifier = Modifier,
-                    )
-                }
+        if (state.showLibrariesFirstRow && hasLibraries) {
+            item(key = HOME_LIBRARIES_ROW_ID) {
+                HomeSection(
+                    section =
+                        HomeSectionModel(
+                            id = HOME_LIBRARIES_ROW_ID,
+                            name = UiText.StringResource(CoreR.string.libraries),
+                            items = state.libraries,
+                        ),
+                    itemsPadding = itemsPadding,
+                    onAction = onAction,
+                    firstItemFocusRequester =
+                        if (firstFocusTargetKey == "libraries") firstContentFocusRequester else null,
+                    modifier = Modifier,
+                )
             }
         }
         if (state.showLibrariesFirstRow) {
@@ -147,19 +161,6 @@ private fun HomeScreenLayout(
                         modifier = Modifier,
                     )
                 }
-            }
-        }
-        if (state.showLibrariesFirstRow) {
-            items(remainingLibraryViews, key = { it.id }) { view ->
-                HomeView(
-                    view = view,
-                    itemsPadding = itemsPadding,
-                    onAction = onAction,
-                    firstItemFocusRequester =
-                        if (firstFocusTargetKey == "view:${view.id}") firstContentFocusRequester
-                        else null,
-                    modifier = Modifier,
-                )
             }
         }
         state.suggestionsSection?.let { section ->
@@ -207,21 +208,21 @@ private fun HomeScreenLayout(
                 )
             }
         }
-        if (!state.showLibrariesFirstRow) {
-            items(state.views, key = { it.id }) { view ->
-                HomeView(
-                    view = view,
-                    itemsPadding = itemsPadding,
-                    onAction = onAction,
-                    firstItemFocusRequester =
-                        if (firstFocusTargetKey == "view:${view.id}") firstContentFocusRequester
-                        else null,
-                    modifier = Modifier,
-                )
-            }
+        items(state.views, key = { it.id }) { view ->
+            HomeView(
+                view = view,
+                itemsPadding = itemsPadding,
+                onAction = onAction,
+                firstItemFocusRequester =
+                    if (firstFocusTargetKey == "view:${view.id}") firstContentFocusRequester else null,
+                modifier = Modifier,
+            )
         }
     }
 }
+
+private val HOME_LIBRARIES_ROW_ID: UUID =
+    UUID.fromString("ecce9cd1-66b0-43b9-a67d-0f4cc4f17347")
 
 @Preview(device = "id:tv_1080p")
 @Composable

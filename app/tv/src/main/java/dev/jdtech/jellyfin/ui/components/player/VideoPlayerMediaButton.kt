@@ -6,8 +6,10 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
-import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.painter.Painter
+import androidx.compose.foundation.layout.size
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.Dp
 import androidx.tv.material3.Icon
 import androidx.tv.material3.IconButton
 
@@ -17,6 +19,8 @@ fun VideoPlayerMediaButton(
     state: VideoPlayerState,
     isPlaying: Boolean,
     modifier: Modifier = Modifier,
+    buttonSize: Dp? = null,
+    iconSize: Dp? = null,
     onClick: () -> Unit = {},
 ) {
     val interactionSource = remember { MutableInteractionSource() }
@@ -31,8 +35,12 @@ fun VideoPlayerMediaButton(
     IconButton(
         onClick = onClick,
         interactionSource = interactionSource,
-        modifier = modifier,
+        modifier = if (buttonSize != null) modifier.size(buttonSize) else modifier,
     ) {
-        Icon(painter = icon, contentDescription = null)
+        Icon(
+            painter = icon,
+            contentDescription = null,
+            modifier = if (iconSize != null) Modifier.size(iconSize) else Modifier,
+        )
     }
 }

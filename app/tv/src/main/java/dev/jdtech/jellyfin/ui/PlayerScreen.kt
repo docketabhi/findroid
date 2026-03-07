@@ -398,6 +398,8 @@ fun PlayerScreen(
             focusRequester = focusRequester,
             state = videoPlayerState,
             isPlaying = isPlaying,
+            contentPadding =
+                if (isAudioOnlyContent) MaterialTheme.spacings.medium else MaterialTheme.spacings.large,
             controls = {
                 VideoPlayerControls(
                     title = uiState.currentItemTitle,
@@ -449,6 +451,20 @@ fun VideoPlayerControls(
     val context = LocalContext.current
     val isAudioOnlyContent = !hasSelectedMotionVideoTrack(player)
     var showAdvancedMenu by remember { mutableStateOf(false) }
+    val panelHorizontalPadding =
+        if (isAudioOnlyContent) MaterialTheme.spacings.medium else MaterialTheme.spacings.large
+    val panelVerticalPadding =
+        if (isAudioOnlyContent) MaterialTheme.spacings.small else MaterialTheme.spacings.default
+    val headerToActionsSpacing =
+        if (isAudioOnlyContent) MaterialTheme.spacings.small else MaterialTheme.spacings.default
+    val actionsToSeekbarSpacing =
+        if (isAudioOnlyContent) MaterialTheme.spacings.small else MaterialTheme.spacings.large
+    val mediaButtonsSpacing =
+        if (isAudioOnlyContent) MaterialTheme.spacings.extraSmall else MaterialTheme.spacings.medium
+    val infoChipSpacing =
+        if (isAudioOnlyContent) MaterialTheme.spacings.extraSmall else MaterialTheme.spacings.small
+    val mediaButtonSize = if (isAudioOnlyContent) 52.dp else null
+    val mediaButtonIconSize = if (isAudioOnlyContent) 22.dp else null
     val onPlayPauseToggle = { shouldPlay: Boolean ->
         if (shouldPlay) {
             player.play()
@@ -465,8 +481,8 @@ fun VideoPlayerControls(
                     shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
                 )
                 .padding(
-                    horizontal = MaterialTheme.spacings.large,
-                    vertical = MaterialTheme.spacings.default,
+                    horizontal = panelHorizontalPadding,
+                    vertical = panelVerticalPadding,
                 )
     ) {
         if (title.isNotBlank()) {
@@ -480,24 +496,24 @@ fun VideoPlayerControls(
         }
         Row(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(MaterialTheme.spacings.small),
+            horizontalArrangement = Arrangement.spacedBy(infoChipSpacing),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             if (!isAudioOnlyContent && videoDetails != "Video: --") {
-                PlayerInfoChip(text = videoDetails)
+                PlayerInfoChip(text = videoDetails, compact = isAudioOnlyContent)
             }
             if (audioDetails != "Audio: --") {
-                PlayerInfoChip(text = audioDetails)
+                PlayerInfoChip(text = audioDetails, compact = isAudioOnlyContent)
             }
         }
-        Spacer(modifier = Modifier.height(MaterialTheme.spacings.default))
+        Spacer(modifier = Modifier.height(headerToActionsSpacing))
 
         // Buttons at top: Play/Pause, Audio, Subtitle
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement =
                 Arrangement.spacedBy(
-                    space = MaterialTheme.spacings.medium,
+                    space = mediaButtonsSpacing,
                     alignment = Alignment.CenterHorizontally,
                 ),
             verticalAlignment = Alignment.CenterVertically,
@@ -507,6 +523,8 @@ fun VideoPlayerControls(
                     icon = painterResource(id = R.drawable.ic_skip_back),
                     state = state,
                     isPlaying = isPlaying,
+                    buttonSize = mediaButtonSize,
+                    iconSize = mediaButtonIconSize,
                     onClick = {
                         if (player.hasPreviousMediaItem()) {
                             player.seekToPreviousMediaItem()
@@ -523,6 +541,8 @@ fun VideoPlayerControls(
                 state = state,
                 isPlaying = isPlaying,
                 modifier = Modifier.focusRequester(focusRequester),
+                buttonSize = mediaButtonSize,
+                iconSize = mediaButtonIconSize,
                 onClick = { onPlayPauseToggle(!isPlaying) },
             )
             
@@ -531,6 +551,8 @@ fun VideoPlayerControls(
                 icon = painterResource(id = R.drawable.ic_speaker),
                 state = state,
                 isPlaying = isPlaying,
+                buttonSize = mediaButtonSize,
+                iconSize = mediaButtonIconSize,
                 onClick = {
                     // Cycle through audio tracks
                     val tracks = getTracks(player, C.TRACK_TYPE_AUDIO)
@@ -563,6 +585,8 @@ fun VideoPlayerControls(
                     icon = painterResource(id = R.drawable.ic_closed_caption),
                     state = state,
                     isPlaying = isPlaying,
+                    buttonSize = mediaButtonSize,
+                    iconSize = mediaButtonIconSize,
                     onClick = {
                         // Cycle through subtitle tracks
                         val tracks = getTracks(player, C.TRACK_TYPE_TEXT)
@@ -594,6 +618,8 @@ fun VideoPlayerControls(
                     icon = painterResource(id = R.drawable.ic_skip_forward),
                     state = state,
                     isPlaying = isPlaying,
+                    buttonSize = mediaButtonSize,
+                    iconSize = mediaButtonIconSize,
                     onClick = {
                         if (player.hasNextMediaItem()) {
                             player.seekToNextMediaItem()
@@ -608,11 +634,13 @@ fun VideoPlayerControls(
                 icon = painterResource(id = R.drawable.ic_settings),
                 state = state,
                 isPlaying = isPlaying,
+                buttonSize = mediaButtonSize,
+                iconSize = mediaButtonIconSize,
                 onClick = { showAdvancedMenu = !showAdvancedMenu },
             )
         }
         
-        Spacer(modifier = Modifier.height(MaterialTheme.spacings.large))
+        Spacer(modifier = Modifier.height(actionsToSeekbarSpacing))
         
         // Seekbar at bottom with time display
         Column(modifier = Modifier.fillMaxWidth()) {
@@ -711,7 +739,11 @@ fun VideoPlayerControls(
 }
 
 @Composable
-private fun PlayerInfoChip(text: String, modifier: Modifier = Modifier) {
+private fun PlayerInfoChip(
+    text: String,
+    compact: Boolean = false,
+    modifier: Modifier = Modifier,
+) {
     Box(
         modifier =
             modifier
@@ -719,7 +751,10 @@ private fun PlayerInfoChip(text: String, modifier: Modifier = Modifier) {
                     color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.85f),
                     shape = RoundedCornerShape(999.dp),
                 )
-                .padding(horizontal = 10.dp, vertical = 4.dp),
+                .padding(
+                    horizontal = if (compact) 8.dp else 10.dp,
+                    vertical = if (compact) 3.dp else 4.dp,
+                ),
     ) {
         Text(
             text = text,

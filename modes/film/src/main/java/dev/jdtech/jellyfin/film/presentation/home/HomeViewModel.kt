@@ -6,6 +6,7 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import dev.jdtech.jellyfin.database.ServerDatabaseDao
 import dev.jdtech.jellyfin.film.R as FilmR
 import dev.jdtech.jellyfin.models.CollectionType
+import dev.jdtech.jellyfin.models.FindroidCollection
 import dev.jdtech.jellyfin.models.HomeItem
 import dev.jdtech.jellyfin.models.HomeSection
 import dev.jdtech.jellyfin.models.UiText
@@ -63,8 +64,16 @@ constructor(
                 val currentServer = appPreferences.getValue(appPreferences.currentServer)
                 val newServer = currentServer?.let { serverId -> database.get(serverId) }
 
-                val (suggestionsSection, resumeSection, nextUpSection, supportedViews) =
+                val (libraries, suggestionsSection, resumeSection, nextUpSection, supportedViews) =
                     coroutineScope {
+                        val librariesDeferred =
+                            async {
+                                runCatching { loadLibrariesData() }
+                                    .getOrElse { e ->
+                                        Timber.w(e, "Failed loading libraries")
+                                        emptyList()
+                                    }
+                            }
                         val suggestionsDeferred =
                             async {
                                 runCatching { loadSuggestionsData() }
@@ -97,7 +106,8 @@ constructor(
                                         emptyList()
                                     }
                             }
-                        Quadruple(
+                        Quintuple(
+                            librariesDeferred.await(),
                             suggestionsDeferred.await(),
                             resumeDeferred.await(),
                             nextUpDeferred.await(),
@@ -113,6 +123,7 @@ constructor(
                 _state.update {
                     it.copy(
                         server = newServer,
+                        libraries = libraries,
                         suggestionsSection = suggestionsSection,
                         resumeSection = resumeSection,
                         nextUpSection = nextUpSection,
@@ -152,6 +163,10 @@ constructor(
         } else {
             HomeItem.Suggestions(id = uuidSuggestions, items = items)
         }
+    }
+
+    private suspend fun loadLibrariesData(): List<FindroidCollection> {
+        return repository.getLibraries()
     }
 
     private suspend fun loadResumeItemsData(): HomeItem.Section? {
@@ -232,4 +247,10 @@ constructor(
     }
 }
 
-private data class Quadruple<A, B, C, D>(val first: A, val second: B, val third: C, val fourth: D)
+private data class Quintuple<A, B, C, D, E>(
+    val first: A,
+    val second: B,
+    val third: C,
+    val fourth: D,
+    val fifth: E,
+)

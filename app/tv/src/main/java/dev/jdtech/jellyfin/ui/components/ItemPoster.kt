@@ -14,6 +14,8 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.foundation.shape.CircleShape
 import androidx.tv.material3.MaterialTheme
 import coil3.compose.AsyncImage
+import dev.jdtech.jellyfin.models.CollectionType
+import dev.jdtech.jellyfin.models.FindroidCollection
 import dev.jdtech.jellyfin.models.FindroidEpisode
 import dev.jdtech.jellyfin.models.FindroidItem
 import dev.jdtech.jellyfin.models.FindroidMovie
@@ -84,6 +86,10 @@ fun resolvePosterUri(item: FindroidItem, direction: Direction): Any? {
 }
 
 private fun isAudioLikeItem(item: FindroidItem): Boolean {
+    if (item is FindroidCollection) {
+        return item.type == CollectionType.Music || item.type == CollectionType.MusicVideos
+    }
+
     if (item !is FindroidMovie) return false
 
     val hasMusicMetadata =

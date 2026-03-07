@@ -5,6 +5,7 @@ import androidx.annotation.StringRes
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -219,8 +220,12 @@ private fun MainScreenLayout(
             }
         }
         when (activeTabIndex) {
+            0 -> {
+                SearchPlaceholderScreen()
+            }
             1 -> {
                 HomeScreen(
+                    navigateToLibrary = navigateToLibrary,
                     navigateToMovie = navigateToMovie,
                     navigateToShow = navigateToShow,
                     navigateToPlayer = navigateToPlayer,
@@ -246,6 +251,32 @@ private fun MainScreenLayout(
                     },
                 )
             }
+        }
+    }
+}
+
+@Composable
+private fun SearchPlaceholderScreen() {
+    Box(
+        modifier = Modifier.fillMaxSize(),
+        contentAlignment = Alignment.TopStart,
+    ) {
+        Column(
+            modifier =
+                Modifier.padding(
+                    PaddingValues(
+                        horizontal = MaterialTheme.spacings.large,
+                        vertical = MaterialTheme.spacings.large,
+                    )
+                ),
+            verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacings.small),
+        ) {
+            Text(text = stringResource(CoreR.string.search), style = MaterialTheme.typography.displayMedium)
+            Text(
+                text = stringResource(CoreR.string.no_search_results),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.75f),
+            )
         }
     }
 }

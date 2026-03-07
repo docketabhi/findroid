@@ -20,6 +20,7 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.tv.material3.MaterialTheme
 import dev.jdtech.jellyfin.presentation.theme.FindroidTheme
@@ -31,6 +32,7 @@ fun VideoPlayerOverlay(
     modifier: Modifier = Modifier,
     state: VideoPlayerState = rememberVideoPlayerState(),
     focusRequester: FocusRequester = remember { FocusRequester() },
+    contentPadding: Dp = MaterialTheme.spacings.large,
     controls: @Composable () -> Unit = {},
 ) {
     LaunchedEffect(state.controlsVisible) {
@@ -63,7 +65,7 @@ fun VideoPlayerOverlay(
                         )
             )
 
-            Column(Modifier.padding(MaterialTheme.spacings.default * 2)) { controls() }
+            Column(Modifier.padding(contentPadding)) { controls() }
         }
     }
 }

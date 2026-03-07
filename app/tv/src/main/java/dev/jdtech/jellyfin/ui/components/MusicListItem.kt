@@ -252,13 +252,13 @@ private val SpotifyDiscOuter = Color(0xFF2A2A2A)
 private val SpotifyDiscInner = Color(0xFF1E1E1E)
 private val SpotifyDiscHole = Color(0xFF9A9A9A)
 
-private const val MUSIC_ROW_MIN_HEIGHT_DP = 72
-private const val MUSIC_ROW_HORIZONTAL_PADDING_DP = 10
-private const val MUSIC_ROW_VERTICAL_PADDING_DP = 8
-private const val MUSIC_HEADER_VERTICAL_PADDING_DP = 4
-private const val MUSIC_ROW_GAP_DP = 10
-private const val MUSIC_TRACK_NUMBER_WIDTH_DP = 26
-private const val MUSIC_THUMBNAIL_SIZE_DP = 48
+private const val MUSIC_ROW_MIN_HEIGHT_DP = 64
+private const val MUSIC_ROW_HORIZONTAL_PADDING_DP = 8
+private const val MUSIC_ROW_VERTICAL_PADDING_DP = 6
+private const val MUSIC_HEADER_VERTICAL_PADDING_DP = 2
+private const val MUSIC_ROW_GAP_DP = 8
+private const val MUSIC_TRACK_NUMBER_WIDTH_DP = 24
+private const val MUSIC_THUMBNAIL_SIZE_DP = 42
 private const val MUSIC_TIME_WIDTH_DP = 56
 
 @Preview

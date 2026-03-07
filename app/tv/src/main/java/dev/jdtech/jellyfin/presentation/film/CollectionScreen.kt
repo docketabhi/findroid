@@ -18,6 +18,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.tv.material3.MaterialTheme
@@ -76,7 +77,7 @@ internal fun CollectionScreenLayout(
             CircularProgressIndicator(modifier = Modifier.align(Alignment.Center))
         } else {
             LazyVerticalGrid(
-                columns = GridCells.Fixed(5),
+                columns = GridCells.Fixed(COLLECTION_GRID_COLUMNS),
                 horizontalArrangement = Arrangement.spacedBy(MaterialTheme.spacings.default),
                 verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacings.default),
                 contentPadding =
@@ -89,6 +90,15 @@ internal fun CollectionScreenLayout(
                 item(span = { GridItemSpan(this.maxLineSpan) }) {
                     Text(text = collectionName, style = MaterialTheme.typography.displayMedium)
                 }
+                if (state.sections.isEmpty()) {
+                    item(span = { GridItemSpan(this.maxLineSpan) }) {
+                        Text(
+                            text = stringResource(CoreR.string.collection_no_media),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.75f),
+                        )
+                    }
+                }
                 state.sections.forEach { section ->
                     item(span = { GridItemSpan(this.maxLineSpan) }) {
                         Text(
@@ -97,10 +107,17 @@ internal fun CollectionScreenLayout(
                         )
                     }
                     items(section.items, key = { it.id }) { item ->
+                        val direction =
+                            if (item is FindroidEpisode) Direction.HORIZONTAL else Direction.VERTICAL
                         ItemCard(
                             item = item,
-                            direction =
-                                if (item is FindroidEpisode) Direction.HORIZONTAL else Direction.VERTICAL,
+                            direction = direction,
+                            cardWidthDp =
+                                if (direction == Direction.HORIZONTAL) {
+                                    COLLECTION_HORIZONTAL_CARD_WIDTH_DP
+                                } else {
+                                    COLLECTION_VERTICAL_CARD_WIDTH_DP
+                                },
                             onClick = { onAction(CollectionAction.OnItemClick(item)) },
                             surfaceModifier =
                                 if (item.id == firstItemId) {
@@ -122,6 +139,10 @@ internal fun CollectionScreenLayout(
         }
     }
 }
+
+private const val COLLECTION_GRID_COLUMNS = 6
+private const val COLLECTION_VERTICAL_CARD_WIDTH_DP = 116
+private const val COLLECTION_HORIZONTAL_CARD_WIDTH_DP = 170
 
 @Preview(device = "id:tv_1080p")
 @Composable
