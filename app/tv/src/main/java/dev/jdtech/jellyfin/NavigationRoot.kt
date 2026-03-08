@@ -169,6 +169,14 @@ fun NavigationRoot(
         composable<MainRoute> {
             MainScreen(
                 navigateToSettings = { navController.navigate(SettingsRoute) },
+                navigateToCollection = { collectionId, collectionName ->
+                    navController.navigate(
+                        CollectionRoute(
+                            collectionId = collectionId.toString(),
+                            collectionName = collectionName,
+                        )
+                    )
+                },
                 navigateToLibrary = { libraryId, libraryName, libraryType ->
                     navController.navigate(
                         LibraryRoute(

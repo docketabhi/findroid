@@ -5,7 +5,6 @@ import androidx.annotation.StringRes
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -15,6 +14,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -25,6 +25,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusProperties
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.res.painterResource
@@ -32,6 +34,9 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.tv.material3.Icon
 import androidx.tv.material3.MaterialTheme
@@ -50,6 +55,7 @@ import dev.jdtech.jellyfin.models.User
 import dev.jdtech.jellyfin.presentation.film.FavoritesScreen
 import dev.jdtech.jellyfin.presentation.film.HomeScreen
 import dev.jdtech.jellyfin.presentation.film.MediaScreen
+import dev.jdtech.jellyfin.presentation.film.SearchScreen
 import dev.jdtech.jellyfin.presentation.theme.FindroidTheme
 import dev.jdtech.jellyfin.presentation.theme.spacings
 import dev.jdtech.jellyfin.ui.components.LoadingIndicator
@@ -62,6 +68,7 @@ import org.jellyfin.sdk.model.api.BaseItemKind
 @Composable
 fun MainScreen(
     navigateToSettings: () -> Unit,
+    navigateToCollection: (collectionId: UUID, collectionName: String) -> Unit,
     navigateToLibrary: (libraryId: UUID, libraryName: String, libraryType: CollectionType) -> Unit,
     navigateToMovie: (itemId: UUID) -> Unit,
     navigateToShow: (itemId: UUID) -> Unit,
@@ -75,6 +82,7 @@ fun MainScreen(
     MainScreenLayout(
         uiState = delegatedUiState,
         navigateToSettings = navigateToSettings,
+        navigateToCollection = navigateToCollection,
         navigateToLibrary = navigateToLibrary,
         navigateToMovie = navigateToMovie,
         navigateToShow = navigateToShow,
@@ -94,6 +102,7 @@ enum class TabDestination(@param:DrawableRes val icon: Int, @param:StringRes val
 private fun MainScreenLayout(
     uiState: MainViewModel.UiState,
     navigateToSettings: () -> Unit,
+    navigateToCollection: (collectionId: UUID, collectionName: String) -> Unit,
     navigateToLibrary: (libraryId: UUID, libraryName: String, libraryType: CollectionType) -> Unit,
     navigateToMovie: (itemId: UUID) -> Unit,
     navigateToShow: (itemId: UUID) -> Unit,
@@ -101,8 +110,13 @@ private fun MainScreenLayout(
 ) {
     var focusedTabIndex by rememberSaveable { mutableIntStateOf(1) }
     var activeTabIndex by rememberSaveable { mutableIntStateOf(focusedTabIndex) }
+    val lifecycleOwner = LocalLifecycleOwner.current
 
     var isLoading by remember { mutableStateOf(false) }
+    val tabFocusRequesters = remember {
+        List(TabDestination.entries.size) { FocusRequester() }
+    }
+    val searchFirstContentFocusRequester = remember { FocusRequester() }
     val homeFirstContentFocusRequester = remember { FocusRequester() }
     val librariesFirstContentFocusRequester = remember { FocusRequester() }
     val favoritesFirstContentFocusRequester = remember { FocusRequester() }
@@ -113,6 +127,42 @@ private fun MainScreenLayout(
             user = uiState.user
         }
         else -> Unit
+    }
+
+    fun focusTabContent(tabIndex: Int): Boolean {
+        val activeRequester =
+            when (tabIndex) {
+                0 -> searchFirstContentFocusRequester
+                1 -> homeFirstContentFocusRequester
+                2 -> librariesFirstContentFocusRequester
+                3 -> favoritesFirstContentFocusRequester
+                else -> null
+            }
+        return activeRequester?.let { requester ->
+            runCatching { requester.requestFocus() }.isSuccess
+        } ?: false
+    }
+
+    fun focusActiveTab() {
+        focusedTabIndex = activeTabIndex
+        tabFocusRequesters.getOrNull(activeTabIndex)?.let { requester ->
+            runCatching { requester.requestFocus() }
+        }
+    }
+
+    LaunchedEffect(Unit) {
+        focusActiveTab()
+    }
+
+    DisposableEffect(lifecycleOwner, activeTabIndex) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                focusActiveTab()
+            }
+        }
+
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
 
     Column(modifier = Modifier.fillMaxSize()) {
@@ -149,28 +199,7 @@ private fun MainScreenLayout(
                 },
                 modifier =
                     Modifier.align(Alignment.Center).onPreviewKeyEvent { keyEvent ->
-                        if (
-                            keyEvent.nativeKeyEvent.action == android.view.KeyEvent.ACTION_DOWN &&
-                                (
-                                    keyEvent.nativeKeyEvent.keyCode ==
-                                        android.view.KeyEvent.KEYCODE_DPAD_DOWN ||
-                                        keyEvent.nativeKeyEvent.keyCode ==
-                                            android.view.KeyEvent.KEYCODE_SYSTEM_NAVIGATION_DOWN
-                                )
-                        ) {
-                            val activeRequester =
-                                when (activeTabIndex) {
-                                    1 -> homeFirstContentFocusRequester
-                                    2 -> librariesFirstContentFocusRequester
-                                    3 -> favoritesFirstContentFocusRequester
-                                    else -> null
-                                }
-                            activeRequester?.let { requester ->
-                                runCatching { requester.requestFocus() }.isSuccess
-                            } ?: false
-                        } else {
-                            false
-                        }
+                        isDownNavigationKey(keyEvent) && focusTabContent(focusedTabIndex)
                     },
             ) {
                 TabDestination.entries.forEachIndexed { index, tab ->
@@ -194,7 +223,21 @@ private fun MainScreenLayout(
                             Modifier.padding(
                                 horizontal = MaterialTheme.spacings.default / 2,
                                 vertical = MaterialTheme.spacings.small,
-                            ),
+                            )
+                                .focusRequester(tabFocusRequesters[index])
+                                .focusProperties {
+                                down =
+                                    when (index) {
+                                        0 -> searchFirstContentFocusRequester
+                                        1 -> homeFirstContentFocusRequester
+                                        2 -> librariesFirstContentFocusRequester
+                                        3 -> favoritesFirstContentFocusRequester
+                                        else -> FocusRequester.Default
+                                    }
+                                }
+                                .onPreviewKeyEvent { keyEvent ->
+                                    isDownNavigationKey(keyEvent) && focusTabContent(index)
+                                },
                     ) {
                         Icon(
                             painter = painterResource(id = tab.icon),
@@ -221,7 +264,13 @@ private fun MainScreenLayout(
         }
         when (activeTabIndex) {
             0 -> {
-                SearchPlaceholderScreen()
+                SearchScreen(
+                    navigateToCollection = navigateToCollection,
+                    navigateToMovie = navigateToMovie,
+                    navigateToShow = navigateToShow,
+                    navigateToPlayer = navigateToPlayer,
+                    firstContentFocusRequester = searchFirstContentFocusRequester,
+                )
             }
             1 -> {
                 HomeScreen(
@@ -255,30 +304,13 @@ private fun MainScreenLayout(
     }
 }
 
-@Composable
-private fun SearchPlaceholderScreen() {
-    Box(
-        modifier = Modifier.fillMaxSize(),
-        contentAlignment = Alignment.TopStart,
-    ) {
-        Column(
-            modifier =
-                Modifier.padding(
-                    PaddingValues(
-                        horizontal = MaterialTheme.spacings.large,
-                        vertical = MaterialTheme.spacings.large,
-                    )
-                ),
-            verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacings.small),
-        ) {
-            Text(text = stringResource(CoreR.string.search), style = MaterialTheme.typography.displayMedium)
-            Text(
-                text = stringResource(CoreR.string.no_search_results),
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.75f),
+private fun isDownNavigationKey(keyEvent: androidx.compose.ui.input.key.KeyEvent): Boolean {
+    return keyEvent.nativeKeyEvent.action == android.view.KeyEvent.ACTION_DOWN &&
+        (
+            keyEvent.nativeKeyEvent.keyCode == android.view.KeyEvent.KEYCODE_DPAD_DOWN ||
+                keyEvent.nativeKeyEvent.keyCode ==
+                    android.view.KeyEvent.KEYCODE_SYSTEM_NAVIGATION_DOWN
             )
-        }
-    }
 }
 
 @Preview(device = "id:tv_1080p")
@@ -288,6 +320,7 @@ private fun MainScreenLayoutPreview() {
         MainScreenLayout(
             uiState = MainViewModel.UiState.Normal(server = dummyServer, user = dummyUser),
             navigateToSettings = {},
+            navigateToCollection = { _, _ -> },
             navigateToLibrary = { _, _, _ -> },
             navigateToMovie = {},
             navigateToShow = {},

@@ -9,8 +9,12 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -35,6 +39,7 @@ import dev.jdtech.jellyfin.presentation.film.components.HomeSection
 import dev.jdtech.jellyfin.presentation.film.components.HomeView
 import dev.jdtech.jellyfin.presentation.theme.FindroidTheme
 import dev.jdtech.jellyfin.presentation.theme.spacings
+import dev.jdtech.jellyfin.ui.components.StatusContent
 import java.util.UUID
 import org.jellyfin.sdk.model.api.BaseItemKind
 
@@ -49,6 +54,7 @@ fun HomeScreen(
     isLoading: (Boolean) -> Unit,
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
+    var preferredFocusItemId by rememberSaveable { mutableStateOf<String?>(null) }
 
     LaunchedEffect(true) { viewModel.loadData() }
 
@@ -57,10 +63,12 @@ fun HomeScreen(
     HomeScreenLayout(
         state = state,
         firstContentFocusRequester = firstContentFocusRequester,
+        preferredFocusItemId = preferredFocusItemId?.let(UUID::fromString),
         onAction = { action ->
             when (action) {
                 is HomeAction.OnItemClick -> {
                     val item = action.item
+                    preferredFocusItemId = item.id.toString()
                     when (item) {
                         is FindroidCollection -> navigateToLibrary(item.id, item.name, item.type)
                         is FindroidMovie -> navigateToMovie(item.id)
@@ -70,12 +78,14 @@ fun HomeScreen(
                         }
                     }
                 }
-                is HomeAction.OnLibraryClick ->
+                is HomeAction.OnLibraryClick -> {
+                    preferredFocusItemId = action.library.id.toString()
                     navigateToLibrary(
                         action.library.id,
                         action.library.name,
                         action.library.type,
                     )
+                }
                 else -> Unit
             }
             viewModel.onAction(action)
@@ -87,6 +97,7 @@ fun HomeScreen(
 private fun HomeScreenLayout(
     state: HomeState,
     firstContentFocusRequester: FocusRequester? = null,
+    preferredFocusItemId: UUID? = null,
     onAction: (HomeAction) -> Unit,
 ) {
     val itemsPadding = PaddingValues(horizontal = MaterialTheme.spacings.large)
@@ -95,15 +106,32 @@ private fun HomeScreenLayout(
     val hasSuggestions = !state.suggestionsSection?.items.isNullOrEmpty()
     val hasResume = !state.resumeSection?.homeSection?.items.isNullOrEmpty()
     val hasNextUp = !state.nextUpSection?.homeSection?.items.isNullOrEmpty()
+    val hasPreferredFocusItem =
+        preferredFocusItemId != null &&
+            (
+                state.libraries.any { it.id == preferredFocusItemId } ||
+                    state.suggestionsSection?.items?.any { it.id == preferredFocusItemId } == true ||
+                    state.resumeSection?.homeSection?.items?.any { it.id == preferredFocusItemId } ==
+                        true ||
+                    state.nextUpSection?.homeSection?.items?.any { it.id == preferredFocusItemId } ==
+                        true ||
+                    state.views.any { view ->
+                        view.view.items.any { it.id == preferredFocusItemId }
+                    }
+                )
     val firstFocusTargetKey =
-        when {
-            state.showLibrariesFirstRow && hasLibraries -> "libraries"
-            state.showLibrariesFirstRow && hasResume -> "resume"
-            hasSuggestions -> "suggestions"
-            hasResume -> "resume"
-            hasNextUp -> "nextup"
-            firstViewWithItemsId != null -> "view:$firstViewWithItemsId"
-            else -> null
+        if (hasPreferredFocusItem) {
+            null
+        } else {
+            when {
+                state.showLibrariesFirstRow && hasLibraries -> "libraries"
+                state.showLibrariesFirstRow && hasResume -> "resume"
+                hasSuggestions -> "suggestions"
+                hasResume -> "resume"
+                hasNextUp -> "nextup"
+                firstViewWithItemsId != null -> "view:$firstViewWithItemsId"
+                else -> null
+            }
         }
 
     LazyColumn(
@@ -116,6 +144,7 @@ private fun HomeScreenLayout(
         verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacings.large),
     ) {
         if (
+                state.error != null &&
                 state.suggestionsSection == null &&
                 state.resumeSection == null &&
                 state.nextUpSection == null &&
@@ -123,10 +152,30 @@ private fun HomeScreenLayout(
                 state.views.isEmpty() &&
                 !state.isLoading
         ) {
+            item(key = "home-error-state") {
+                StatusContent(
+                    title = stringResource(CoreR.string.error_loading_data),
+                    message =
+                        state.error?.localizedMessage
+                            ?: stringResource(CoreR.string.unknown_error),
+                    actionLabel = stringResource(CoreR.string.retry),
+                    onAction = { onAction(HomeAction.OnRetryClick) },
+                    modifier = Modifier.padding(itemsPadding),
+                )
+            }
+        }
+        if (
+                state.suggestionsSection == null &&
+                state.resumeSection == null &&
+                state.nextUpSection == null &&
+                state.libraries.isEmpty() &&
+                state.views.isEmpty() &&
+                state.error == null &&
+                !state.isLoading
+        ) {
             item(key = "empty-home-state") {
-                Text(
-                    text = "No content available",
-                    style = MaterialTheme.typography.headlineSmall,
+                StatusContent(
+                    title = stringResource(CoreR.string.no_content_available),
                     modifier = Modifier.padding(itemsPadding),
                 )
             }
@@ -142,6 +191,16 @@ private fun HomeScreenLayout(
                         ),
                     itemsPadding = itemsPadding,
                     onAction = onAction,
+                    preferredItemId = preferredFocusItemId,
+                    preferredItemFocusRequester =
+                        if (
+                            hasPreferredFocusItem &&
+                                state.libraries.any { it.id == preferredFocusItemId }
+                        ) {
+                            firstContentFocusRequester
+                        } else {
+                            null
+                        },
                     firstItemFocusRequester =
                         if (firstFocusTargetKey == "libraries") firstContentFocusRequester else null,
                     modifier = Modifier,
@@ -155,6 +214,16 @@ private fun HomeScreenLayout(
                         section = section.homeSection,
                         itemsPadding = itemsPadding,
                         onAction = onAction,
+                        preferredItemId = preferredFocusItemId,
+                        preferredItemFocusRequester =
+                            if (
+                                hasPreferredFocusItem &&
+                                    section.homeSection.items.any { it.id == preferredFocusItemId }
+                            ) {
+                                firstContentFocusRequester
+                            } else {
+                                null
+                            },
                         firstItemFocusRequester =
                             if (firstFocusTargetKey == "resume") firstContentFocusRequester
                             else null,
@@ -174,6 +243,16 @@ private fun HomeScreenLayout(
                         ),
                     itemsPadding = itemsPadding,
                     onAction = onAction,
+                    preferredItemId = preferredFocusItemId,
+                    preferredItemFocusRequester =
+                        if (
+                            hasPreferredFocusItem &&
+                                section.items.any { it.id == preferredFocusItemId }
+                        ) {
+                            firstContentFocusRequester
+                        } else {
+                            null
+                        },
                     firstItemFocusRequester =
                         if (firstFocusTargetKey == "suggestions") firstContentFocusRequester
                         else null,
@@ -188,6 +267,16 @@ private fun HomeScreenLayout(
                         section = section.homeSection,
                         itemsPadding = itemsPadding,
                         onAction = onAction,
+                        preferredItemId = preferredFocusItemId,
+                        preferredItemFocusRequester =
+                            if (
+                                hasPreferredFocusItem &&
+                                    section.homeSection.items.any { it.id == preferredFocusItemId }
+                            ) {
+                                firstContentFocusRequester
+                            } else {
+                                null
+                            },
                         firstItemFocusRequester =
                             if (firstFocusTargetKey == "resume") firstContentFocusRequester
                             else null,
@@ -202,6 +291,16 @@ private fun HomeScreenLayout(
                     section = section.homeSection,
                     itemsPadding = itemsPadding,
                     onAction = onAction,
+                    preferredItemId = preferredFocusItemId,
+                    preferredItemFocusRequester =
+                        if (
+                            hasPreferredFocusItem &&
+                                section.homeSection.items.any { it.id == preferredFocusItemId }
+                        ) {
+                            firstContentFocusRequester
+                        } else {
+                            null
+                        },
                     firstItemFocusRequester =
                         if (firstFocusTargetKey == "nextup") firstContentFocusRequester else null,
                     modifier = Modifier,
@@ -213,6 +312,16 @@ private fun HomeScreenLayout(
                 view = view,
                 itemsPadding = itemsPadding,
                 onAction = onAction,
+                preferredItemId = preferredFocusItemId,
+                preferredItemFocusRequester =
+                    if (
+                        hasPreferredFocusItem &&
+                            view.view.items.any { it.id == preferredFocusItemId }
+                    ) {
+                        firstContentFocusRequester
+                    } else {
+                        null
+                    },
                 firstItemFocusRequester =
                     if (firstFocusTargetKey == "view:${view.id}") firstContentFocusRequester else null,
                 modifier = Modifier,

@@ -23,6 +23,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.tv.material3.Border
 import androidx.tv.material3.ClickableSurfaceDefaults
@@ -31,6 +32,7 @@ import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Surface
 import androidx.tv.material3.Text
 import coil3.compose.AsyncImage
+import dev.jdtech.jellyfin.core.R as CoreR
 import dev.jdtech.jellyfin.core.presentation.dummy.dummyMovie
 import dev.jdtech.jellyfin.models.FindroidItem
 import dev.jdtech.jellyfin.models.FindroidMovie
@@ -58,13 +60,13 @@ fun MusicListColumnsHeader(modifier: Modifier = Modifier) {
         )
         Spacer(modifier = Modifier.size(MUSIC_THUMBNAIL_SIZE_DP.dp))
         Text(
-            text = "Title",
+            text = stringResource(CoreR.string.music_list_title),
             style = MaterialTheme.typography.labelMedium,
             color = SpotifyMuted,
             modifier = Modifier.weight(1.5f),
         )
         Text(
-            text = "Album",
+            text = stringResource(CoreR.string.music_list_album),
             style = MaterialTheme.typography.labelMedium,
             color = SpotifyMuted,
             modifier = Modifier.weight(1f),
@@ -72,7 +74,7 @@ fun MusicListColumnsHeader(modifier: Modifier = Modifier) {
             overflow = TextOverflow.Ellipsis,
         )
         Text(
-            text = "Time",
+            text = stringResource(CoreR.string.music_list_time),
             style = MaterialTheme.typography.labelMedium,
             color = SpotifyMuted,
             modifier = Modifier.width(MUSIC_TIME_WIDTH_DP.dp),
@@ -163,7 +165,7 @@ fun MusicListItem(
             }
 
             Text(
-                text = metadata.album,
+                text = metadata.album.ifBlank { stringResource(CoreR.string.music_list_single) },
                 style = MaterialTheme.typography.bodySmall,
                 color = SpotifyMuted,
                 modifier = Modifier.weight(1f),
@@ -222,11 +224,11 @@ private data class TrackMetadata(
 
 private fun trackMetadata(item: FindroidItem): TrackMetadata {
     if (item !is FindroidMovie) {
-        return TrackMetadata(subtitle = "", album = "Single")
+        return TrackMetadata(subtitle = "", album = "")
     }
 
     val artist = item.albumArtist ?: item.artists.firstOrNull()
-    val album = item.album ?: "Single"
+    val album = item.album.orEmpty()
     val subtitle =
         when {
             !artist.isNullOrBlank() && !item.album.isNullOrBlank() -> "$artist • ${item.album}"

@@ -3,6 +3,7 @@ package dev.jdtech.jellyfin.player.local.mpv
 import android.app.Application
 import android.content.Context
 import android.content.res.AssetManager
+import android.graphics.SurfaceTexture
 import android.media.AudioManager
 import android.os.Handler
 import android.os.Looper
@@ -39,6 +40,7 @@ import dev.jdtech.mpv.MPVLib
 import java.io.File
 import java.io.FileOutputStream
 import java.util.concurrent.CopyOnWriteArraySet
+import kotlin.math.roundToInt
 import org.json.JSONArray
 import org.json.JSONException
 import org.json.JSONObject
@@ -53,7 +55,7 @@ class MPVPlayer(
     private val seekBackIncrement: Long = C.DEFAULT_SEEK_BACK_INCREMENT_MS,
     private val seekForwardIncrement: Long = C.DEFAULT_SEEK_FORWARD_INCREMENT_MS,
     private val pauseAtEndOfMediaItems: Boolean = false,
-    videoOutput: String = "gpu",
+    private val videoOutput: String = "gpu",
     audioOutput: String = "audiotrack",
     hwDec: String = "mediacodec",
 ) : BasePlayer(), MPVLib.EventObserver, AudioManager.OnAudioFocusChangeListener {
@@ -264,6 +266,13 @@ class MPVPlayer(
     private var initialIndex: Int = 0
     private var initialSeekTo: Long = 0L
     private var oldMediaItem: MediaItem? = null
+    private var currentPlaylistMetadata: MediaMetadata = MediaMetadata.EMPTY
+    private var shuffleModeEnabled = false
+    private var attachedSurfaceHolder: SurfaceHolder? = null
+    private var attachedSurfaceView: SurfaceView? = null
+    private var attachedTextureView: TextureView? = null
+    private var attachedDirectSurface: Surface? = null
+    private var attachedTextureSurface: Surface? = null
 
     // mpv events
     override fun eventProperty(property: String) {
@@ -645,6 +654,13 @@ class MPVPlayer(
         MPVLib.command(arrayOf("playlist-clear"))
         MPVLib.command(arrayOf("playlist-remove", "current"))
         internalMediaItems = mediaItems
+        initialIndex = if (resetPosition) 0 else currentMediaItemIndex.coerceAtLeast(0)
+        initialSeekTo =
+            if (resetPosition) {
+                0L
+            } else {
+                (currentPositionMs ?: 0L) / C.MILLIS_PER_SECOND
+            }
     }
 
     /**
@@ -703,7 +719,15 @@ class MPVPlayer(
      *   to the end of the playlist.
      */
     override fun moveMediaItems(fromIndex: Int, toIndex: Int, newIndex: Int) {
-        TODO("Not yet implemented")
+        if (fromIndex >= toIndex || fromIndex !in internalMediaItems.indices) return
+
+        val safeToIndex = toIndex.coerceIn(fromIndex + 1, internalMediaItems.size)
+        val movedItems = internalMediaItems.subList(fromIndex, safeToIndex).toList()
+        if (movedItems.isEmpty()) return
+
+        internalMediaItems.subList(fromIndex, safeToIndex).clear()
+        internalMediaItems.addAll(newIndex.coerceIn(0, internalMediaItems.size), movedItems)
+        rebuildPlaylistPreservingState()
     }
 
     override fun replaceMediaItems(
@@ -711,7 +735,11 @@ class MPVPlayer(
         toIndex: Int,
         mediaItems: MutableList<MediaItem>,
     ) {
-        TODO("Not yet implemented")
+        val safeFromIndex = fromIndex.coerceIn(0, internalMediaItems.size)
+        val safeToIndex = toIndex.coerceIn(safeFromIndex, internalMediaItems.size)
+        internalMediaItems.subList(safeFromIndex, safeToIndex).clear()
+        internalMediaItems.addAll(safeFromIndex, mediaItems)
+        rebuildPlaylistPreservingState()
     }
 
     /**
@@ -722,7 +750,18 @@ class MPVPlayer(
      *   than the size of the playlist, media items to the end of the playlist are removed.
      */
     override fun removeMediaItems(fromIndex: Int, toIndex: Int) {
-        TODO("Not yet implemented")
+        if (internalMediaItems.isEmpty()) return
+
+        val safeFromIndex = fromIndex.coerceIn(0, internalMediaItems.lastIndex)
+        val safeToIndex = toIndex.coerceIn(safeFromIndex + 1, internalMediaItems.size)
+        if (safeFromIndex >= safeToIndex) return
+
+        internalMediaItems.subList(safeFromIndex, safeToIndex).clear()
+        if (internalMediaItems.isEmpty()) {
+            stop()
+            return
+        }
+        rebuildPlaylistPreservingState()
     }
 
     /**
@@ -908,7 +947,32 @@ class MPVPlayer(
      * @param shuffleModeEnabled Whether shuffling is enabled.
      */
     override fun setShuffleModeEnabled(shuffleModeEnabled: Boolean) {
-        TODO("Not yet implemented")
+        if (this.shuffleModeEnabled == shuffleModeEnabled) return
+        this.shuffleModeEnabled = shuffleModeEnabled
+
+        if (shuffleModeEnabled && internalMediaItems.size > 1) {
+            val currentMediaId = currentMediaItem?.mediaId
+            val currentItem =
+                currentMediaId?.let { mediaId ->
+                    internalMediaItems.firstOrNull { it.mediaId == mediaId }
+                }
+            val shuffledItems =
+                internalMediaItems
+                    .filterNot { it.mediaId == currentMediaId }
+                    .shuffled()
+
+            internalMediaItems =
+                mutableListOf<MediaItem>().apply {
+                    currentItem?.let { add(it) }
+                    addAll(shuffledItems)
+                }
+            currentMediaItemIndex = if (currentItem != null) 0 else currentMediaItemIndex
+            rebuildPlaylistPreservingState()
+        }
+
+        listeners.sendEvent(EVENT_SHUFFLE_MODE_ENABLED_CHANGED) { listener ->
+            listener.onShuffleModeEnabledChanged(shuffleModeEnabled)
+        }
     }
 
     /**
@@ -917,7 +981,7 @@ class MPVPlayer(
      * @see Player.Listener.onShuffleModeEnabledChanged
      */
     override fun getShuffleModeEnabled(): Boolean {
-        return false
+        return shuffleModeEnabled
     }
 
     /**
@@ -927,7 +991,7 @@ class MPVPlayer(
      * @see Player.Listener.onIsLoadingChanged
      */
     override fun isLoading(): Boolean {
-        return false
+        return playbackState == STATE_BUFFERING
     }
 
     /**
@@ -1089,11 +1153,11 @@ class MPVPlayer(
     }
 
     override fun getPlaylistMetadata(): MediaMetadata {
-        return MediaMetadata.EMPTY
+        return currentPlaylistMetadata
     }
 
     override fun setPlaylistMetadata(mediaMetadata: MediaMetadata) {
-        TODO("Not yet implemented")
+        currentPlaylistMetadata = mediaMetadata
     }
 
     /**
@@ -1187,7 +1251,7 @@ class MPVPlayer(
 
     /** Returns the attributes for audio playback. */
     override fun getAudioAttributes(): AudioAttributes {
-        return AudioAttributes.DEFAULT
+        return audioAttributes
     }
 
     /**
@@ -1196,7 +1260,7 @@ class MPVPlayer(
      * @param audioVolume Linear output gain to apply to all audio channels.
      */
     override fun setVolume(audioVolume: Float) {
-        TODO("Not yet implemented")
+        MPVLib.setPropertyInt("volume", (audioVolume.coerceIn(0f, 1f) * 100f).roundToInt())
     }
 
     /**
@@ -1213,7 +1277,15 @@ class MPVPlayer(
      * player.
      */
     override fun clearVideoSurface() {
-        TODO("Not yet implemented")
+        attachedSurfaceHolder?.removeCallback(surfaceHolder)
+        attachedSurfaceView?.holder?.removeCallback(surfaceHolder)
+        attachedTextureView?.surfaceTextureListener = null
+        attachedSurfaceHolder = null
+        attachedSurfaceView = null
+        attachedTextureView = null
+        attachedDirectSurface = null
+        releaseAttachedTextureSurface()
+        detachSurface()
     }
 
     /**
@@ -1223,7 +1295,10 @@ class MPVPlayer(
      * @param surface The surface to clear.
      */
     override fun clearVideoSurface(surface: Surface?) {
-        TODO("Not yet implemented")
+        if (surface == null) return
+        if (attachedDirectSurface == surface || attachedTextureSurface == surface) {
+            clearVideoSurface()
+        }
     }
 
     /**
@@ -1239,7 +1314,11 @@ class MPVPlayer(
      * @param surface The [Surface].
      */
     override fun setVideoSurface(surface: Surface?) {
-        TODO("Not yet implemented")
+        clearVideoSurface()
+        attachedDirectSurface = surface
+        if (surface != null && surface.isValid) {
+            attachSurface(surface)
+        }
     }
 
     /**
@@ -1249,7 +1328,12 @@ class MPVPlayer(
      * @param surfaceHolder The surface holder.
      */
     override fun setVideoSurfaceHolder(surfaceHolder: SurfaceHolder?) {
-        TODO("Not yet implemented")
+        clearVideoSurface()
+        attachedSurfaceHolder = surfaceHolder
+        surfaceHolder?.addCallback(this.surfaceHolder)
+        if (surfaceHolder?.surface?.isValid == true) {
+            attachSurface(surfaceHolder.surface)
+        }
     }
 
     /**
@@ -1259,7 +1343,10 @@ class MPVPlayer(
      * @param surfaceHolder The surface holder to clear.
      */
     override fun clearVideoSurfaceHolder(surfaceHolder: SurfaceHolder?) {
-        TODO("Not yet implemented")
+        if (surfaceHolder == null || attachedSurfaceHolder != surfaceHolder) return
+        surfaceHolder.removeCallback(this.surfaceHolder)
+        attachedSurfaceHolder = null
+        detachSurface()
     }
 
     /**
@@ -1269,7 +1356,13 @@ class MPVPlayer(
      * @param surfaceView The surface view.
      */
     override fun setVideoSurfaceView(surfaceView: SurfaceView?) {
+        clearVideoSurface()
+        attachedSurfaceView = surfaceView
         surfaceView?.holder?.addCallback(surfaceHolder)
+        if (surfaceView?.holder?.surface?.isValid == true) {
+            attachSurface(surfaceView.holder.surface)
+            MPVLib.setPropertyString("android-surface-size", "${surfaceView.width}x${surfaceView.height}")
+        }
     }
 
     /**
@@ -1279,7 +1372,10 @@ class MPVPlayer(
      * @param surfaceView The texture view to clear.
      */
     override fun clearVideoSurfaceView(surfaceView: SurfaceView?) {
-        surfaceView?.holder?.removeCallback(surfaceHolder)
+        if (surfaceView == null || attachedSurfaceView != surfaceView) return
+        surfaceView.holder.removeCallback(surfaceHolder)
+        attachedSurfaceView = null
+        detachSurface()
     }
 
     /**
@@ -1289,7 +1385,12 @@ class MPVPlayer(
      * @param textureView The texture view.
      */
     override fun setVideoTextureView(textureView: TextureView?) {
-        TODO("Not yet implemented")
+        clearVideoSurface()
+        attachedTextureView = textureView
+        textureView?.surfaceTextureListener = textureViewSurfaceListener
+        if (textureView?.isAvailable == true) {
+            attachTextureSurface(textureView.surfaceTexture, textureView.width, textureView.height)
+        }
     }
 
     /**
@@ -1299,7 +1400,11 @@ class MPVPlayer(
      * @param textureView The texture view to clear.
      */
     override fun clearVideoTextureView(textureView: TextureView?) {
-        TODO("Not yet implemented")
+        if (textureView == null || attachedTextureView != textureView) return
+        textureView.surfaceTextureListener = null
+        attachedTextureView = null
+        releaseAttachedTextureSurface()
+        detachSurface()
     }
 
     /**
@@ -1366,49 +1471,37 @@ class MPVPlayer(
      */
     @Deprecated("Deprecated in Java")
     override fun setDeviceVolume(volume: Int) {
-        throw IllegalArgumentException(
-            "You should use global volume controls. Check out AUDIO_SERVICE."
-        )
+        setDeviceVolume(volume, 0)
     }
 
     override fun setDeviceVolume(volume: Int, flags: Int) {
-        MPVLib.setPropertyInt("volume", volume)
+        MPVLib.setPropertyInt("volume", volume.coerceIn(0, 100))
     }
 
     /** Increases the volume of the device. */
     @Deprecated("Deprecated in Java")
     override fun increaseDeviceVolume() {
-        throw IllegalArgumentException(
-            "You should use global volume controls. Check out AUDIO_SERVICE."
-        )
+        increaseDeviceVolume(0)
     }
 
     override fun increaseDeviceVolume(flags: Int) {
-        throw IllegalArgumentException(
-            "You should use global volume controls. Check out AUDIO_SERVICE."
-        )
+        setDeviceVolume(getDeviceVolume() + 5, flags)
     }
 
     /** Decreases the volume of the device. */
     @Deprecated("Deprecated in Java")
     override fun decreaseDeviceVolume() {
-        throw IllegalArgumentException(
-            "You should use global volume controls. Check out AUDIO_SERVICE."
-        )
+        decreaseDeviceVolume(0)
     }
 
     override fun decreaseDeviceVolume(flags: Int) {
-        throw IllegalArgumentException(
-            "You should use global volume controls. Check out AUDIO_SERVICE."
-        )
+        setDeviceVolume(getDeviceVolume() - 5, flags)
     }
 
     /** Sets the mute state of the device. */
     @Deprecated("Deprecated in Java")
     override fun setDeviceMuted(muted: Boolean) {
-        throw IllegalArgumentException(
-            "You should use global volume controls. Check out AUDIO_SERVICE."
-        )
+        setDeviceMuted(muted, 0)
     }
 
     override fun setDeviceMuted(muted: Boolean, flags: Int) {
@@ -1424,8 +1517,90 @@ class MPVPlayer(
     }
 
     override fun setAudioAttributes(audioAttributes: AudioAttributes, handleAudioFocus: Boolean) {
-        TODO("Not yet implemented")
+        Timber.d(
+            "Ignoring dynamic audio attribute update. audioAttributes=%s handleAudioFocus=%s",
+            audioAttributes,
+            handleAudioFocus,
+        )
     }
+
+    private fun rebuildPlaylistPreservingState() {
+        val currentMediaId = currentMediaItem?.mediaId
+        val currentPosition = currentPositionMs ?: 0L
+        val shouldResumePlayback = currentPlayWhenReady
+
+        MPVLib.command(arrayOf("playlist-clear"))
+        MPVLib.command(arrayOf("playlist-remove", "current"))
+
+        initialIndex =
+            currentMediaId
+                ?.let { mediaId -> internalMediaItems.indexOfFirst { it.mediaId == mediaId } }
+                ?.takeIf { it >= 0 }
+                ?: currentMediaItemIndex.coerceIn(0, internalMediaItems.lastIndex)
+        initialSeekTo = currentPosition / C.MILLIS_PER_SECOND
+        oldMediaItem = null
+
+        prepare()
+        setPlayWhenReady(shouldResumePlayback)
+    }
+
+    private fun attachSurface(surface: Surface) {
+        MPVLib.attachSurface(surface)
+        MPVLib.setOptionString("force-window", "yes")
+        MPVLib.setOptionString("vo", videoOutput)
+    }
+
+    private fun detachSurface() {
+        MPVLib.setOptionString("vo", "null")
+        MPVLib.setOptionString("force-window", "no")
+        MPVLib.detachSurface()
+    }
+
+    private fun attachTextureSurface(
+        surfaceTexture: SurfaceTexture?,
+        width: Int,
+        height: Int,
+    ) {
+        if (surfaceTexture == null) return
+        releaseAttachedTextureSurface()
+        attachedTextureSurface =
+            Surface(surfaceTexture).also { textureSurface ->
+                attachSurface(textureSurface)
+                MPVLib.setPropertyString("android-surface-size", "${width}x${height}")
+            }
+    }
+
+    private fun releaseAttachedTextureSurface() {
+        attachedTextureSurface?.release()
+        attachedTextureSurface = null
+    }
+
+    private val textureViewSurfaceListener =
+        object : TextureView.SurfaceTextureListener {
+            override fun onSurfaceTextureAvailable(
+                surface: SurfaceTexture,
+                width: Int,
+                height: Int,
+            ) {
+                attachTextureSurface(surface, width, height)
+            }
+
+            override fun onSurfaceTextureSizeChanged(
+                surface: SurfaceTexture,
+                width: Int,
+                height: Int,
+            ) {
+                MPVLib.setPropertyString("android-surface-size", "${width}x${height}")
+            }
+
+            override fun onSurfaceTextureDestroyed(surface: SurfaceTexture): Boolean {
+                releaseAttachedTextureSurface()
+                detachSurface()
+                return true
+            }
+
+            override fun onSurfaceTextureUpdated(surface: SurfaceTexture) = Unit
+        }
 
     fun updateZoomMode(enabled: Boolean) {
         if (enabled) {
@@ -1450,9 +1625,7 @@ class MPVPlayer(
              * @param holder The SurfaceHolder whose surface is being created.
              */
             override fun surfaceCreated(holder: SurfaceHolder) {
-                MPVLib.attachSurface(holder.surface)
-                MPVLib.setOptionString("force-window", "yes")
-                MPVLib.setOptionString("vo", videoOutput)
+                attachSurface(holder.surface)
             }
 
             /**
@@ -1483,9 +1656,7 @@ class MPVPlayer(
              * @param holder The SurfaceHolder whose surface is being destroyed.
              */
             override fun surfaceDestroyed(holder: SurfaceHolder) {
-                MPVLib.setOptionString("vo", "null")
-                MPVLib.setOptionString("force-window", "no")
-                MPVLib.detachSurface()
+                detachSurface()
             }
         }
 

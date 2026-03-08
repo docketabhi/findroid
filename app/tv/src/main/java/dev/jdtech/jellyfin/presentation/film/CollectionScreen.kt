@@ -36,6 +36,7 @@ import dev.jdtech.jellyfin.presentation.theme.FindroidTheme
 import dev.jdtech.jellyfin.presentation.theme.spacings
 import dev.jdtech.jellyfin.ui.components.Direction
 import dev.jdtech.jellyfin.ui.components.ItemCard
+import dev.jdtech.jellyfin.ui.components.StatusContent
 import java.util.UUID
 
 @Composable
@@ -52,6 +53,7 @@ fun CollectionScreen(
     CollectionScreenLayout(
         collectionName = collectionName,
         state = state,
+        onRetry = { viewModel.loadItems(collectionId) },
         onAction = { action ->
             when (action) {
                 is CollectionAction.OnItemClick -> onItemClick(action.item)
@@ -66,6 +68,7 @@ internal fun CollectionScreenLayout(
     collectionName: String,
     state: CollectionState,
     firstContentFocusRequester: FocusRequester? = null,
+    onRetry: (() -> Unit)? = null,
     onAction: (CollectionAction) -> Unit,
 ) {
     val focusRequester = firstContentFocusRequester ?: remember { FocusRequester() }
@@ -75,6 +78,16 @@ internal fun CollectionScreenLayout(
     Box(modifier = Modifier.fillMaxSize()) {
         if (state.isLoading) {
             CircularProgressIndicator(modifier = Modifier.align(Alignment.Center))
+        } else if (state.error != null && state.sections.isEmpty()) {
+            StatusContent(
+                title = stringResource(CoreR.string.error_loading_data),
+                message =
+                    state.error?.localizedMessage
+                        ?: stringResource(CoreR.string.unknown_error),
+                actionLabel = onRetry?.let { stringResource(CoreR.string.retry) },
+                onAction = onRetry,
+                modifier = Modifier.align(Alignment.Center),
+            )
         } else {
             LazyVerticalGrid(
                 columns = GridCells.Fixed(COLLECTION_GRID_COLUMNS),
@@ -161,6 +174,7 @@ private fun CollectionScreenLayoutPreview() {
                             )
                         )
                 ),
+            onRetry = {},
             onAction = {},
         )
     }

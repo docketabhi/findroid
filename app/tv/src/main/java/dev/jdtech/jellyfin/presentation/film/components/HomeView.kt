@@ -27,6 +27,8 @@ fun HomeView(
     view: HomeItem.ViewItem,
     itemsPadding: PaddingValues,
     onAction: (HomeAction) -> Unit,
+    preferredItemId: java.util.UUID? = null,
+    preferredItemFocusRequester: FocusRequester? = null,
     firstItemFocusRequester: FocusRequester? = null,
     modifier: Modifier = Modifier,
 ) {
@@ -48,7 +50,9 @@ fun HomeView(
                     cardWidthDp = HOME_VERTICAL_CARD_WIDTH_DP,
                     onClick = { onAction(HomeAction.OnItemClick(it)) },
                     surfaceModifier =
-                        if (index == 0 && firstItemFocusRequester != null) {
+                        if (preferredItemFocusRequester != null && item.id == preferredItemId) {
+                            Modifier.focusRequester(preferredItemFocusRequester)
+                        } else if (index == 0 && firstItemFocusRequester != null) {
                             Modifier.focusRequester(firstItemFocusRequester)
                         } else {
                             Modifier

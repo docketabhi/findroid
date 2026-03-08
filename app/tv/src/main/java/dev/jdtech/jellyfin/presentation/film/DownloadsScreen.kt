@@ -29,6 +29,7 @@ fun DownloadsScreen(
     CollectionScreenLayout(
         collectionName = stringResource(CoreR.string.title_download),
         state = state,
+        onRetry = { viewModel.loadItems() },
         onAction = { action ->
             when (action) {
                 is CollectionAction.OnItemClick -> onItemClick(action.item)
@@ -55,6 +56,7 @@ private fun DownloadsScreenLayoutPreview() {
                             )
                         )
                 ),
+            onRetry = {},
             onAction = {},
         )
     }

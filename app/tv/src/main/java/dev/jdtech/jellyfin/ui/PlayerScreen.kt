@@ -62,7 +62,9 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.media3.common.C
 import androidx.media3.common.Format
+import androidx.media3.common.MediaItem
 import androidx.media3.common.Player
+import androidx.media3.common.Tracks
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.session.MediaSession
 import androidx.media3.ui.PlayerView
@@ -73,6 +75,7 @@ import androidx.tv.material3.Icon
 import androidx.tv.material3.MaterialTheme
 import dev.jdtech.jellyfin.core.R
 import dev.jdtech.jellyfin.player.core.domain.models.Track
+import dev.jdtech.jellyfin.player.local.presentation.PlayerEvents
 import dev.jdtech.jellyfin.player.local.presentation.PlayerViewModel
 import dev.jdtech.jellyfin.presentation.theme.spacings
 import dev.jdtech.jellyfin.ui.components.player.VideoPlayerMediaButton
@@ -84,6 +87,7 @@ import java.util.Locale
 import java.util.UUID
 import kotlin.math.roundToInt
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.isActive
 
 @Composable
@@ -150,6 +154,8 @@ fun PlayerScreen(
     var audioGainUnavailableToastShown by remember { mutableStateOf(false) }
     val loudnessEnhancerState = remember { mutableStateOf<LoudnessEnhancer?>(null) }
     var isPlaying by remember { mutableStateOf(viewModel.player.isPlaying) }
+    val hardwareGainUnavailableMessage =
+        stringResource(R.string.player_hardware_gain_unavailable)
 
     fun applyAudioGain(targetGainMb: Int, showUnavailableToast: Boolean) {
         val clampedGain = snapAudioGain(targetGainMb)
@@ -166,7 +172,7 @@ fun PlayerScreen(
                 if (showUnavailableToast && !audioGainUnavailableToastShown) {
                     Toast.makeText(
                         context,
-                        "Hardware gain unavailable, using software boost",
+                        hardwareGainUnavailableMessage,
                         Toast.LENGTH_SHORT,
                     ).show()
                     audioGainUnavailableToastShown = true
@@ -175,10 +181,31 @@ fun PlayerScreen(
         } else if (showUnavailableToast && !audioGainUnavailableToastShown) {
             Toast.makeText(
                 context,
-                "Hardware gain unavailable, using software boost",
+                hardwareGainUnavailableMessage,
                 Toast.LENGTH_SHORT,
             ).show()
             audioGainUnavailableToastShown = true
+        }
+    }
+
+    fun refreshTrackDetailsAndAutoGain() {
+        val (audioInfo, videoInfo) = getSelectedTrackDetails(viewModel.player)
+        audioDetails = audioInfo
+        videoDetails = videoInfo
+
+        val autoGainRecommendation = getSelectedAudioGainRecommendation(viewModel.player)
+        if (autoGainRecommendation != null) {
+            autoGainTargetMb = autoGainRecommendation.targetGainMb
+            if (autoGainRecommendation.key != lastAutoGainTrackKey) {
+                lastAutoGainTrackKey = autoGainRecommendation.key
+                autoGainEnabled = true
+            }
+            if (autoGainEnabled && audioGainMb != autoGainRecommendation.targetGainMb) {
+                applyAudioGain(
+                    targetGainMb = autoGainRecommendation.targetGainMb,
+                    showUnavailableToast = false,
+                )
+            }
         }
     }
 
@@ -189,22 +216,60 @@ fun PlayerScreen(
         }
     }
 
+    LaunchedEffect(viewModel) {
+        viewModel.eventsChannelFlow.collectLatest { event ->
+            when (event) {
+                PlayerEvents.NavigateBack -> onNavigateBack()
+                is PlayerEvents.IsPlayingChanged -> isPlaying = event.isPlaying
+            }
+        }
+    }
+
+    DisposableEffect(viewModel.player) {
+        val listener =
+            object : Player.Listener {
+                override fun onIsPlayingChanged(isPlayingNow: Boolean) {
+                    isPlaying = isPlayingNow
+                }
+
+                override fun onPlaybackStateChanged(newPlaybackState: Int) {
+                    playbackState = newPlaybackState
+                    bufferedPosition = viewModel.player.bufferedPosition
+                    currentPosition = viewModel.player.currentPosition
+                }
+
+                override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
+                    currentPosition = 0L
+                    bufferedPosition = 0L
+                    refreshTrackDetailsAndAutoGain()
+                }
+
+                override fun onTracksChanged(tracks: Tracks) {
+                    refreshTrackDetailsAndAutoGain()
+                }
+            }
+
+        viewModel.player.addListener(listener)
+        refreshTrackDetailsAndAutoGain()
+
+        onDispose { viewModel.player.removeListener(listener) }
+    }
+
+    LaunchedEffect(isPlaying, videoPlayerState.controlsVisible, playbackState) {
+        while (isActive) {
+            currentPosition = viewModel.player.currentPosition
+            if (videoPlayerState.controlsVisible || isPlaying || playbackState == Player.STATE_BUFFERING) {
+                bufferedPosition = viewModel.player.bufferedPosition
+            }
+            delay(if (videoPlayerState.controlsVisible || isPlaying) 250L else 500L)
+        }
+    }
+
     LaunchedEffect(Unit) {
         var lastRxBytes = TrafficStats.getUidRxBytes(Process.myUid())
         var lastTimestampMs = System.currentTimeMillis()
-        var trackDetailsTick = 0
         while (isActive) {
-            val pollDelayMs =
-                if (videoPlayerState.controlsVisible || playbackState == Player.STATE_BUFFERING) {
-                    500L
-                } else {
-                    1_000L
-                }
-            delay(pollDelayMs)
-            currentPosition = viewModel.player.currentPosition
-            bufferedPosition = viewModel.player.bufferedPosition
-            playbackState = viewModel.player.playbackState
-            isPlaying = viewModel.player.isPlaying
+            delay(1_000L)
             val nowRxBytes = TrafficStats.getUidRxBytes(Process.myUid())
             val nowTimestampMs = System.currentTimeMillis()
             val deltaBytes = nowRxBytes - lastRxBytes
@@ -216,33 +281,9 @@ fun PlayerScreen(
                     (deltaBytes * 8_000L) / deltaMs
                 } else {
                     0L
-                }
+            }
             lastRxBytes = nowRxBytes
             lastTimestampMs = nowTimestampMs
-
-            val shouldRefreshTrackDetails =
-                videoPlayerState.controlsVisible &&
-                    (trackDetailsTick++ % TRACK_DETAILS_REFRESH_INTERVAL_TICKS == 0)
-            if (shouldRefreshTrackDetails || audioDetails == "Audio: --") {
-                val (audioInfo, videoInfo) = getSelectedTrackDetails(viewModel.player)
-                audioDetails = audioInfo
-                videoDetails = videoInfo
-            }
-
-            val autoGainRecommendation = getSelectedAudioGainRecommendation(viewModel.player)
-            if (autoGainRecommendation != null) {
-                autoGainTargetMb = autoGainRecommendation.targetGainMb
-                if (autoGainRecommendation.key != lastAutoGainTrackKey) {
-                    lastAutoGainTrackKey = autoGainRecommendation.key
-                    autoGainEnabled = true
-                }
-                if (autoGainEnabled && audioGainMb != autoGainRecommendation.targetGainMb) {
-                    applyAudioGain(
-                        targetGainMb = autoGainRecommendation.targetGainMb,
-                        showUnavailableToast = false,
-                    )
-                }
-            }
 
             val currentSessionId = viewModel.player.audioSessionId
             if (
@@ -451,6 +492,12 @@ fun VideoPlayerControls(
     val context = LocalContext.current
     val isAudioOnlyContent = !hasSelectedMotionVideoTrack(player)
     var showAdvancedMenu by remember { mutableStateOf(false) }
+    val noPreviousTrackLabel = stringResource(R.string.player_no_previous_track)
+    val noNextTrackLabel = stringResource(R.string.player_no_next_track)
+    val noAudioTracksLabel = stringResource(R.string.player_no_audio_tracks)
+    val noSubtitlesLabel = stringResource(R.string.player_no_subtitles_available)
+    val defaultTrackLabel = stringResource(R.string.player_default_track)
+    val trackOffLabel = stringResource(R.string.player_track_off)
     val panelHorizontalPadding =
         if (isAudioOnlyContent) MaterialTheme.spacings.medium else MaterialTheme.spacings.large
     val panelVerticalPadding =
@@ -529,7 +576,7 @@ fun VideoPlayerControls(
                         if (player.hasPreviousMediaItem()) {
                             player.seekToPreviousMediaItem()
                         } else {
-                            Toast.makeText(context, "No previous track", Toast.LENGTH_SHORT).show()
+                            Toast.makeText(context, noPreviousTrackLabel, Toast.LENGTH_SHORT).show()
                         }
                     },
                 )
@@ -557,14 +604,18 @@ fun VideoPlayerControls(
                     // Cycle through audio tracks
                     val tracks = getTracks(player, C.TRACK_TYPE_AUDIO)
                     if (tracks.isEmpty()) {
-                        Toast.makeText(context, "No audio tracks", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(context, noAudioTracksLabel, Toast.LENGTH_SHORT).show()
                         return@VideoPlayerMediaButton
                     }
 
                     if (tracks.size == 1) {
                         val onlyTrack = tracks.first()
-                        val trackInfo = onlyTrack.language ?: onlyTrack.label ?: "Default"
-                        Toast.makeText(context, "Audio: $trackInfo", Toast.LENGTH_SHORT).show()
+                        val trackInfo = onlyTrack.language ?: onlyTrack.label ?: defaultTrackLabel
+                        Toast.makeText(
+                            context,
+                            context.getString(R.string.player_audio_track_selected, trackInfo),
+                            Toast.LENGTH_SHORT,
+                        ).show()
                         return@VideoPlayerMediaButton
                     }
 
@@ -574,8 +625,14 @@ fun VideoPlayerControls(
 
                     switchToTrack(player, C.TRACK_TYPE_AUDIO, nextTrack.id)
                     val trackInfo =
-                        nextTrack.language ?: nextTrack.label ?: "Track ${nextIndex + 1}"
-                    Toast.makeText(context, "Audio: $trackInfo", Toast.LENGTH_SHORT).show()
+                        nextTrack.language
+                            ?: nextTrack.label
+                            ?: context.getString(R.string.player_track_number, nextIndex + 1)
+                    Toast.makeText(
+                        context,
+                        context.getString(R.string.player_audio_track_selected, trackInfo),
+                        Toast.LENGTH_SHORT,
+                    ).show()
                 },
             )
 
@@ -591,7 +648,7 @@ fun VideoPlayerControls(
                         // Cycle through subtitle tracks
                         val tracks = getTracks(player, C.TRACK_TYPE_TEXT)
                         if (tracks.size <= 1) {
-                            Toast.makeText(context, "No subtitles available", Toast.LENGTH_SHORT)
+                            Toast.makeText(context, noSubtitlesLabel, Toast.LENGTH_SHORT)
                                 .show()
                             return@VideoPlayerMediaButton
                         }
@@ -604,11 +661,17 @@ fun VideoPlayerControls(
                         switchToTrack(player, C.TRACK_TYPE_TEXT, nextTrack.id)
                         val trackInfo =
                             if (nextTrack.id == -1) {
-                                "Off"
+                                trackOffLabel
                             } else {
-                                nextTrack.language ?: nextTrack.label ?: "Track ${nextIndex + 1}"
+                                nextTrack.language
+                                    ?: nextTrack.label
+                                    ?: context.getString(R.string.player_track_number, nextIndex + 1)
                             }
-                        Toast.makeText(context, "Subtitles: $trackInfo", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(
+                            context,
+                            context.getString(R.string.player_subtitle_track_selected, trackInfo),
+                            Toast.LENGTH_SHORT,
+                        ).show()
                     },
                 )
             }
@@ -624,7 +687,7 @@ fun VideoPlayerControls(
                         if (player.hasNextMediaItem()) {
                             player.seekToNextMediaItem()
                         } else {
-                            Toast.makeText(context, "No next track", Toast.LENGTH_SHORT).show()
+                            Toast.makeText(context, noNextTrackLabel, Toast.LENGTH_SHORT).show()
                         }
                     },
                 )
@@ -655,12 +718,13 @@ fun VideoPlayerControls(
             val gainRangeMb = AUDIO_GAIN_MAX_MB - AUDIO_GAIN_MIN_MB
             val gainProgress =
                 (audioGainMb - AUDIO_GAIN_MIN_MB).toFloat() / gainRangeMb.toFloat()
-            val audioGainText = "Audio Gain: ${formatAudioGain(audioGainMb)}"
+            val audioGainText =
+                stringResource(R.string.player_audio_gain_label, formatAudioGain(audioGainMb))
             val autoGainText =
                 if (autoGainEnabled) {
-                    "Auto Gain: ON (${formatAudioGain(autoGainTargetMb)})"
+                    stringResource(R.string.player_auto_gain_on, formatAudioGain(autoGainTargetMb))
                 } else {
-                    "Auto Gain: OFF (manual)"
+                    stringResource(R.string.player_auto_gain_off)
                 }
 
             if (showAdvancedMenu) {
@@ -880,7 +944,7 @@ private fun AudioNowPlayingOverlay(
         ) {
             RotatingDiscIndicator(isPlaying = isPlaying)
             Text(
-                text = if (title.isNotBlank()) title else "Now Playing",
+                text = if (title.isNotBlank()) title else stringResource(R.string.player_now_playing),
                 style = MaterialTheme.typography.titleSmall,
                 color = MaterialTheme.colorScheme.onSurface,
                 maxLines = 1,

@@ -3,6 +3,7 @@ package dev.jdtech.jellyfin.presentation.film
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.itemsIndexed
 import androidx.compose.runtime.Composable
@@ -13,10 +14,12 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.tv.material3.MaterialTheme
 import dev.jdtech.jellyfin.core.presentation.dummy.dummyCollections
+import dev.jdtech.jellyfin.core.R as CoreR
 import dev.jdtech.jellyfin.film.presentation.media.MediaAction
 import dev.jdtech.jellyfin.film.presentation.media.MediaState
 import dev.jdtech.jellyfin.film.presentation.media.MediaViewModel
@@ -25,6 +28,7 @@ import dev.jdtech.jellyfin.presentation.theme.FindroidTheme
 import dev.jdtech.jellyfin.presentation.theme.spacings
 import dev.jdtech.jellyfin.ui.components.Direction
 import dev.jdtech.jellyfin.ui.components.ItemCard
+import dev.jdtech.jellyfin.ui.components.StatusContent
 import java.util.UUID
 
 @Composable
@@ -82,6 +86,18 @@ private fun LibrariesScreenLayout(
             ),
         modifier = Modifier,
     ) {
+        if (state.error != null && state.libraries.isEmpty() && !state.isLoading) {
+            item(span = { GridItemSpan(this.maxLineSpan) }) {
+                StatusContent(
+                    title = stringResource(CoreR.string.error_loading_data),
+                    message =
+                        state.error?.localizedMessage
+                            ?: stringResource(CoreR.string.unknown_error),
+                    actionLabel = stringResource(CoreR.string.retry),
+                    onAction = { onAction(MediaAction.OnRetryClick) },
+                )
+            }
+        }
         itemsIndexed(state.libraries, key = { _, library -> library.id }) { index, library ->
             ItemCard(
                 item = library,

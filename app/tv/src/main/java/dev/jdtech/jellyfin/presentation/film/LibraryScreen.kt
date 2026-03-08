@@ -50,6 +50,7 @@ import dev.jdtech.jellyfin.ui.components.Direction
 import dev.jdtech.jellyfin.ui.components.ItemCard
 import dev.jdtech.jellyfin.ui.components.MusicListColumnsHeader
 import dev.jdtech.jellyfin.ui.components.MusicListItem
+import dev.jdtech.jellyfin.ui.components.StatusContent
 import java.util.UUID
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flowOf
@@ -83,6 +84,7 @@ fun LibraryScreen(
         libraryName = libraryName,
         libraryType = libraryType,
         state = state,
+        onRetry = { viewModel.loadItems() },
         onAction = { action ->
             when (action) {
                 is LibraryAction.OnItemClick -> {
@@ -116,6 +118,7 @@ private fun LibraryScreenLayout(
     libraryName: String,
     libraryType: CollectionType,
     state: LibraryState,
+    onRetry: () -> Unit,
     onAction: (LibraryAction) -> Unit,
 ) {
     val focusRequester = remember { FocusRequester() }
@@ -137,6 +140,7 @@ private fun LibraryScreenLayout(
         }
 
     var showSortByDialog by remember { mutableStateOf(false) }
+    val refreshError = items.loadState.refresh as? LoadState.Error
 
     LazyVerticalGrid(
         columns = GridCells.Fixed(if (isMusicLibrary) 1 else NON_MUSIC_LIBRARY_GRID_COLUMNS),
@@ -167,7 +171,30 @@ private fun LibraryScreenLayout(
                 MusicListColumnsHeader()
             }
         }
-        if (items.itemCount == 0 && items.loadState.refresh is LoadState.NotLoading && !state.isLoading) {
+        if (items.itemCount == 0 && (refreshError != null || state.error != null) && !state.isLoading) {
+            item(span = { GridItemSpan(this.maxLineSpan) }) {
+                StatusContent(
+                    title = stringResource(CoreR.string.error_loading_data),
+                    message =
+                        (refreshError?.error ?: state.error)?.localizedMessage
+                            ?: stringResource(CoreR.string.unknown_error),
+                    actionLabel = stringResource(CoreR.string.retry),
+                    onAction = {
+                        if (refreshError != null) {
+                            items.retry()
+                        } else {
+                            onRetry()
+                        }
+                    },
+                )
+            }
+        }
+        if (
+            items.itemCount == 0 &&
+                items.loadState.refresh is LoadState.NotLoading &&
+                state.error == null &&
+                !state.isLoading
+        ) {
             item(span = { GridItemSpan(this.maxLineSpan) }) {
                 Text(
                     text = stringResource(CoreR.string.library_no_media),
@@ -229,6 +256,7 @@ private fun LibraryScreenLayoutPreview() {
             libraryName = "Movies",
             libraryType = CollectionType.Movies,
             state = LibraryState(items = items),
+            onRetry = {},
             onAction = {},
         )
     }

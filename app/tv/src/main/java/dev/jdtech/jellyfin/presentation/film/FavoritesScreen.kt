@@ -32,6 +32,7 @@ fun FavoritesScreen(
         collectionName = stringResource(CoreR.string.title_favorite),
         state = state,
         firstContentFocusRequester = firstContentFocusRequester,
+        onRetry = { viewModel.loadItems() },
         onAction = { action ->
             when (action) {
                 is CollectionAction.OnItemClick -> onItemClick(action.item)
@@ -58,6 +59,7 @@ private fun FavoritesScreenLayoutPreview() {
                             )
                         )
                 ),
+            onRetry = {},
             onAction = {},
         )
     }
