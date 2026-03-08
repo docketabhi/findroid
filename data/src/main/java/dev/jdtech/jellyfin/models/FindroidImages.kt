@@ -16,66 +16,98 @@ data class FindroidImages(
 )
 
 fun BaseItemDto.toFindroidImages(jellyfinRepository: JellyfinRepository): FindroidImages {
-    val baseUrl = Uri.parse(jellyfinRepository.getBaseUrl())
+    return buildRemoteFindroidImages(
+        baseUrl = jellyfinRepository.getBaseUrl(),
+        itemId = id,
+        primaryImageTag = imageTags?.get(ImageType.PRIMARY),
+        backdropImageTag = backdropImageTags?.firstOrNull(),
+        logoImageTag = imageTags?.get(ImageType.LOGO),
+        seriesId = seriesId,
+        seriesPrimaryImageTag = seriesPrimaryImageTag,
+    )
+}
+
+fun buildRemoteFindroidImages(
+    baseUrl: String,
+    itemId: UUID,
+    primaryImageTag: String? = null,
+    backdropImageTag: String? = null,
+    logoImageTag: String? = null,
+    seriesId: UUID? = null,
+    seriesPrimaryImageTag: String? = null,
+): FindroidImages {
+    val parsedBaseUrl = Uri.parse(baseUrl)
     val primary =
-        imageTags?.get(ImageType.PRIMARY)?.let { tag ->
-            baseUrl
+        primaryImageTag?.let { tag ->
+            parsedBaseUrl
                 .buildUpon()
-                .appendEncodedPath("items/$id/Images/${ImageType.PRIMARY}")
+                .appendEncodedPath("items/$itemId/Images/${ImageType.PRIMARY}")
                 .appendQueryParameter("maxWidth", PRIMARY_MAX_WIDTH.toString())
                 .appendQueryParameter("quality", IMAGE_QUALITY.toString())
                 .appendQueryParameter("tag", tag)
                 .build()
         }
     val backdrop =
-        backdropImageTags?.firstOrNull()?.let { tag ->
-            baseUrl
+        backdropImageTag?.let { tag ->
+            parsedBaseUrl
                 .buildUpon()
-                .appendEncodedPath("items/$id/Images/${ImageType.BACKDROP}/0")
+                .appendEncodedPath("items/$itemId/Images/${ImageType.BACKDROP}/0")
                 .appendQueryParameter("maxWidth", BACKDROP_MAX_WIDTH.toString())
                 .appendQueryParameter("quality", IMAGE_QUALITY.toString())
                 .appendQueryParameter("tag", tag)
                 .build()
         }
     val logo =
-        imageTags?.get(ImageType.LOGO)?.let { tag ->
-            baseUrl
+        logoImageTag?.let { tag ->
+            parsedBaseUrl
                 .buildUpon()
-                .appendEncodedPath("items/$id/Images/${ImageType.LOGO}")
+                .appendEncodedPath("items/$itemId/Images/${ImageType.LOGO}")
                 .appendQueryParameter("maxWidth", LOGO_MAX_WIDTH.toString())
                 .appendQueryParameter("quality", IMAGE_QUALITY.toString())
                 .appendQueryParameter("tag", tag)
                 .build()
         }
     val showPrimary =
-        seriesPrimaryImageTag?.let { tag ->
-            baseUrl
-                .buildUpon()
-                .appendEncodedPath("items/$seriesId/Images/${ImageType.PRIMARY}")
-                .appendQueryParameter("maxWidth", PRIMARY_MAX_WIDTH.toString())
-                .appendQueryParameter("quality", IMAGE_QUALITY.toString())
-                .appendQueryParameter("tag", tag)
-                .build()
+        if (seriesId != null) {
+            seriesPrimaryImageTag?.let { tag ->
+                parsedBaseUrl
+                    .buildUpon()
+                    .appendEncodedPath("items/$seriesId/Images/${ImageType.PRIMARY}")
+                    .appendQueryParameter("maxWidth", PRIMARY_MAX_WIDTH.toString())
+                    .appendQueryParameter("quality", IMAGE_QUALITY.toString())
+                    .appendQueryParameter("tag", tag)
+                    .build()
+            }
+        } else {
+            null
         }
     val showBackdrop =
-        seriesPrimaryImageTag?.let { tag ->
-            baseUrl
-                .buildUpon()
-                .appendEncodedPath("items/$seriesId/Images/${ImageType.BACKDROP}/0")
-                .appendQueryParameter("maxWidth", BACKDROP_MAX_WIDTH.toString())
-                .appendQueryParameter("quality", IMAGE_QUALITY.toString())
-                .appendQueryParameter("tag", tag)
-                .build()
+        if (seriesId != null) {
+            seriesPrimaryImageTag?.let { tag ->
+                parsedBaseUrl
+                    .buildUpon()
+                    .appendEncodedPath("items/$seriesId/Images/${ImageType.BACKDROP}/0")
+                    .appendQueryParameter("maxWidth", BACKDROP_MAX_WIDTH.toString())
+                    .appendQueryParameter("quality", IMAGE_QUALITY.toString())
+                    .appendQueryParameter("tag", tag)
+                    .build()
+            }
+        } else {
+            null
         }
     val showLogo =
-        seriesPrimaryImageTag?.let { tag ->
-            baseUrl
-                .buildUpon()
-                .appendEncodedPath("items/$seriesId/Images/${ImageType.LOGO}")
-                .appendQueryParameter("maxWidth", LOGO_MAX_WIDTH.toString())
-                .appendQueryParameter("quality", IMAGE_QUALITY.toString())
-                .appendQueryParameter("tag", tag)
-                .build()
+        if (seriesId != null) {
+            seriesPrimaryImageTag?.let { tag ->
+                parsedBaseUrl
+                    .buildUpon()
+                    .appendEncodedPath("items/$seriesId/Images/${ImageType.LOGO}")
+                    .appendQueryParameter("maxWidth", LOGO_MAX_WIDTH.toString())
+                    .appendQueryParameter("quality", IMAGE_QUALITY.toString())
+                    .appendQueryParameter("tag", tag)
+                    .build()
+            }
+        } else {
+            null
         }
 
     return FindroidImages(

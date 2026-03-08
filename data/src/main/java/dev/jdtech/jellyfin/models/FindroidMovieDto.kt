@@ -4,6 +4,7 @@ import androidx.room.Entity
 import androidx.room.PrimaryKey
 import java.time.LocalDateTime
 import java.util.UUID
+import org.jellyfin.sdk.model.api.BaseItemDto
 
 @Entity(tableName = "movies")
 data class FindroidMovieDto(
@@ -37,5 +38,23 @@ fun FindroidMovie.toFindroidMovieDto(serverId: String? = null): FindroidMovieDto
         productionYear = productionYear,
         endDate = endDate,
         chapters = chapters,
+    )
+}
+
+fun BaseItemDto.toFindroidMovieDto(serverId: String? = null): FindroidMovieDto {
+    return FindroidMovieDto(
+        id = id,
+        serverId = serverId,
+        name = name.orEmpty(),
+        originalTitle = originalTitle,
+        overview = overview.orEmpty(),
+        runtimeTicks = runTimeTicks ?: 0L,
+        premiereDate = premiereDate,
+        communityRating = communityRating,
+        officialRating = officialRating,
+        status = status ?: "Ended",
+        productionYear = productionYear,
+        endDate = endDate,
+        chapters = toFindroidChapters(),
     )
 }

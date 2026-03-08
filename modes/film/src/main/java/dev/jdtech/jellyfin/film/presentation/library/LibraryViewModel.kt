@@ -8,6 +8,7 @@ import dev.jdtech.jellyfin.models.CollectionType
 import dev.jdtech.jellyfin.models.SortBy
 import dev.jdtech.jellyfin.models.SortOrder
 import dev.jdtech.jellyfin.repository.JellyfinRepository
+import dev.jdtech.jellyfin.repository.JellyfinRepositoryOfflineImpl
 import dev.jdtech.jellyfin.settings.domain.AppPreferences
 import java.util.UUID
 import javax.inject.Inject
@@ -21,6 +22,7 @@ class LibraryViewModel
 @Inject
 constructor(
     private val jellyfinRepository: JellyfinRepository,
+    private val offlineRepository: JellyfinRepositoryOfflineImpl,
     private val appPreferences: AppPreferences,
 ) : ViewModel() {
     private val _state = MutableStateFlow(LibraryState())
@@ -85,6 +87,24 @@ constructor(
             _state.emit(_state.value.copy(isLoading = true, error = null))
 
             initSorting()
+
+            val cachedItems =
+                offlineRepository
+                    .getItemsPaging(
+                        parentId = parentId,
+                        includeTypes = itemType,
+                        recursive = recursive,
+                        sortBy =
+                            if (
+                                libraryType == CollectionType.TvShows &&
+                                    sortBy == SortBy.DATE_PLAYED
+                            )
+                                SortBy.SERIES_DATE_PLAYED
+                            else sortBy,
+                        sortOrder = sortOrder,
+                    )
+                    .cachedIn(viewModelScope)
+            _state.emit(_state.value.copy(items = cachedItems))
 
             try {
                 val items =

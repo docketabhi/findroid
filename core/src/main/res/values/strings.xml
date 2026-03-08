@@ -102,6 +102,12 @@
     <string name="playback_transcode">Transcoding</string>
     <string name="playback_streaming">Streaming</string>
     <string name="player_now_playing">Now Playing</string>
+    <string name="cache_status_idle">Cache idle</string>
+    <string name="cache_status_syncing">Syncing cache</string>
+    <string name="cache_status_ready">Cache ready</string>
+    <string name="cache_status_error">Cache error</string>
+    <string name="network_connected">Connected</string>
+    <string name="network_disconnected">Disconnected</string>
     <string name="temp">temp</string>
     <string name="offline_mode">Offline Mode</string>
     <string name="offline_mode_icon">Offline Mode icon</string>

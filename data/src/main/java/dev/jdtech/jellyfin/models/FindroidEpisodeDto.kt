@@ -6,6 +6,7 @@ import androidx.room.Index
 import androidx.room.PrimaryKey
 import java.time.LocalDateTime
 import java.util.UUID
+import org.jellyfin.sdk.model.api.BaseItemDto
 
 @Entity(
     tableName = "episodes",
@@ -59,5 +60,26 @@ fun FindroidEpisode.toFindroidEpisodeDto(serverId: String? = null): FindroidEpis
         premiereDate = premiereDate,
         communityRating = communityRating,
         chapters = chapters,
+    )
+}
+
+fun BaseItemDto.toFindroidEpisodeDto(serverId: String? = null): FindroidEpisodeDto? {
+    val showId = seriesId ?: return null
+    val currentSeasonId = seasonId ?: return null
+    return FindroidEpisodeDto(
+        id = id,
+        serverId = serverId,
+        seasonId = currentSeasonId,
+        seriesId = showId,
+        name = name.orEmpty(),
+        seriesName = seriesName.orEmpty(),
+        overview = overview.orEmpty(),
+        indexNumber = indexNumber ?: 0,
+        indexNumberEnd = indexNumberEnd,
+        parentIndexNumber = parentIndexNumber ?: 0,
+        runtimeTicks = runTimeTicks ?: 0L,
+        premiereDate = premiereDate,
+        communityRating = communityRating,
+        chapters = toFindroidChapters(),
     )
 }

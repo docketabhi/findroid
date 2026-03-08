@@ -17,6 +17,7 @@ import androidx.work.WorkManager
 import dagger.hilt.android.AndroidEntryPoint
 import dev.jdtech.jellyfin.presentation.theme.FindroidTheme
 import dev.jdtech.jellyfin.viewmodels.MainViewModel
+import dev.jdtech.jellyfin.work.LibraryCacheSyncWorker
 import dev.jdtech.jellyfin.work.SyncWorker
 import java.util.concurrent.TimeUnit
 
@@ -27,7 +28,10 @@ class MainActivity : ComponentActivity() {
     companion object {
         private const val USER_DATA_SYNC_ONCE_WORK_NAME = "syncUserDataOnce"
         private const val USER_DATA_SYNC_PERIODIC_WORK_NAME = "syncUserDataPeriodic"
+        private const val LIBRARY_CACHE_SYNC_ONCE_WORK_NAME = "libraryCacheSyncOnce"
+        private const val LIBRARY_CACHE_SYNC_PERIODIC_WORK_NAME = "libraryCacheSyncPeriodic"
         private const val USER_DATA_SYNC_INTERVAL_HOURS = 6L
+        private const val LIBRARY_CACHE_SYNC_INTERVAL_HOURS = 6L
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -49,10 +53,10 @@ class MainActivity : ComponentActivity() {
             }
         }
 
-        scheduleUserDataSync()
+        scheduleBackgroundSync()
     }
 
-    private fun scheduleUserDataSync() {
+    private fun scheduleBackgroundSync() {
         val constraints =
             Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build()
         val workManager = WorkManager.getInstance(applicationContext)
@@ -76,6 +80,28 @@ class MainActivity : ComponentActivity() {
             USER_DATA_SYNC_PERIODIC_WORK_NAME,
             ExistingPeriodicWorkPolicy.UPDATE,
             periodicSync,
+        )
+
+        val oneTimeLibraryCacheSync =
+            OneTimeWorkRequestBuilder<LibraryCacheSyncWorker>().setConstraints(constraints).build()
+        val periodicLibraryCacheSync =
+            PeriodicWorkRequestBuilder<LibraryCacheSyncWorker>(
+                LIBRARY_CACHE_SYNC_INTERVAL_HOURS,
+                TimeUnit.HOURS,
+            )
+                .setConstraints(constraints)
+                .setInitialDelay(LIBRARY_CACHE_SYNC_INTERVAL_HOURS, TimeUnit.HOURS)
+                .build()
+
+        workManager.beginUniqueWork(
+            LIBRARY_CACHE_SYNC_ONCE_WORK_NAME,
+            ExistingWorkPolicy.KEEP,
+            oneTimeLibraryCacheSync,
+        ).enqueue()
+        workManager.enqueueUniquePeriodicWork(
+            LIBRARY_CACHE_SYNC_PERIODIC_WORK_NAME,
+            ExistingPeriodicWorkPolicy.UPDATE,
+            periodicLibraryCacheSync,
         )
     }
 }

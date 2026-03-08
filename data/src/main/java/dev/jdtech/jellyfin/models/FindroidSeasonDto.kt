@@ -5,6 +5,7 @@ import androidx.room.ForeignKey
 import androidx.room.Index
 import androidx.room.PrimaryKey
 import java.util.UUID
+import org.jellyfin.sdk.model.api.BaseItemDto
 
 @Entity(
     tableName = "seasons",
@@ -36,5 +37,17 @@ fun FindroidSeason.toFindroidSeasonDto(): FindroidSeasonDto {
         seriesName = seriesName,
         overview = overview,
         indexNumber = indexNumber,
+    )
+}
+
+fun BaseItemDto.toFindroidSeasonDto(): FindroidSeasonDto? {
+    val showId = seriesId ?: return null
+    return FindroidSeasonDto(
+        id = id,
+        seriesId = showId,
+        name = name.orEmpty(),
+        seriesName = seriesName.orEmpty(),
+        overview = overview.orEmpty(),
+        indexNumber = indexNumber ?: 0,
     )
 }

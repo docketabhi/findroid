@@ -3,6 +3,7 @@ package dev.jdtech.jellyfin.viewmodels
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
+import dev.jdtech.jellyfin.cache.LibraryCacheStatusStore
 import dev.jdtech.jellyfin.database.ServerDatabaseDao
 import dev.jdtech.jellyfin.models.Server
 import dev.jdtech.jellyfin.models.User
@@ -17,13 +18,18 @@ import kotlinx.coroutines.withContext
 @HiltViewModel
 class MainViewModel
 @Inject
-constructor(private val appPreferences: AppPreferences, private val database: ServerDatabaseDao) :
+constructor(
+    private val appPreferences: AppPreferences,
+    private val database: ServerDatabaseDao,
+    libraryCacheStatusStore: LibraryCacheStatusStore,
+) :
     ViewModel() {
     private val _state = MutableStateFlow(MainState())
     val state = _state.asStateFlow()
 
     private val _uiState = MutableStateFlow<UiState>(UiState.Loading)
     val uiState = _uiState.asStateFlow()
+    val libraryCacheStatus = libraryCacheStatusStore.status
 
     sealed class UiState {
         data class Normal(val server: Server?, val user: User?) : UiState()

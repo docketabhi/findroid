@@ -15,7 +15,9 @@ import dev.jdtech.jellyfin.models.FindroidShow
 import dev.jdtech.jellyfin.models.FindroidSource
 import dev.jdtech.jellyfin.models.SortBy
 import dev.jdtech.jellyfin.models.SortOrder
+import dev.jdtech.jellyfin.models.toFindroidCollection
 import dev.jdtech.jellyfin.models.toFindroidEpisode
+import dev.jdtech.jellyfin.models.toFindroidItem
 import dev.jdtech.jellyfin.models.toFindroidMovie
 import dev.jdtech.jellyfin.models.toFindroidSeason
 import dev.jdtech.jellyfin.models.toFindroidSegment
@@ -26,6 +28,7 @@ import java.io.File
 import java.util.UUID
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.withContext
 import org.jellyfin.sdk.model.api.BaseItemDto
 import org.jellyfin.sdk.model.api.BaseItemKind
@@ -69,11 +72,20 @@ class JellyfinRepositoryOfflineImpl(
         }
 
     override suspend fun getLibraries(): List<FindroidCollection> {
-        return emptyList()
+        return withContext(Dispatchers.IO) {
+            val serverId = currentServerId() ?: return@withContext emptyList()
+            val baseUrl = currentBaseUrl(serverId)
+            database.getCachedLibraries(serverId).map { it.toFindroidCollection(baseUrl) }
+        }
     }
 
     override suspend fun getItem(itemId: UUID): FindroidItem? {
-        return null
+        return withContext(Dispatchers.IO) {
+            val serverId = currentServerId() ?: return@withContext null
+            val userId = jellyfinApi.userId ?: return@withContext null
+            val baseUrl = currentBaseUrl(serverId)
+            database.getCachedLibraryItem(serverId, itemId)?.toFindroidItem(database, userId, baseUrl)
+        }
     }
 
     override suspend fun getItems(
@@ -85,7 +97,38 @@ class JellyfinRepositoryOfflineImpl(
         startIndex: Int?,
         limit: Int?,
     ): List<FindroidItem> {
-        return emptyList()
+        return withContext(Dispatchers.IO) {
+            val currentParentId = parentId ?: return@withContext emptyList()
+            val serverId = currentServerId() ?: return@withContext emptyList()
+            val userId = jellyfinApi.userId ?: return@withContext emptyList()
+            val baseUrl = currentBaseUrl(serverId)
+            val cachedItems =
+                database.getCachedLibraryItems(serverId, currentParentId).let { items ->
+                    if (includeTypes.isNullOrEmpty()) {
+                        items
+                    } else {
+                        items.filter { item ->
+                            includeTypes.any { includeType -> includeType.serialName == item.type }
+                        }
+                    }
+                }
+            val items =
+                cachedItems.mapNotNull {
+                    runCatching { it.toFindroidItem(database, userId, baseUrl) }.getOrNull()
+                }
+
+            sortCachedItems(items, sortBy, sortOrder)
+                .let { sorted ->
+                    val fromIndex = (startIndex ?: 0).coerceAtLeast(0)
+                    val toIndex =
+                        if (limit != null) {
+                            (fromIndex + limit).coerceAtMost(sorted.size)
+                        } else {
+                            sorted.size
+                        }
+                    if (fromIndex >= sorted.size) emptyList() else sorted.subList(fromIndex, toIndex)
+                }
+        }
     }
 
     override suspend fun getItemsPaging(
@@ -95,7 +138,17 @@ class JellyfinRepositoryOfflineImpl(
         sortBy: SortBy,
         sortOrder: SortOrder,
     ): Flow<PagingData<FindroidItem>> {
-        TODO("Not yet implemented")
+        return flowOf(
+            PagingData.from(
+                getItems(
+                    parentId = parentId,
+                    includeTypes = includeTypes,
+                    recursive = recursive,
+                    sortBy = sortBy,
+                    sortOrder = sortOrder,
+                )
+            )
+        )
     }
 
     override suspend fun getPerson(personId: UUID): FindroidPerson {
@@ -111,7 +164,22 @@ class JellyfinRepositoryOfflineImpl(
     }
 
     override suspend fun getFavoriteItems(): List<FindroidItem> {
-        TODO("Not yet implemented")
+        return withContext(Dispatchers.IO) {
+            val serverId = currentServerId() ?: return@withContext emptyList()
+            val userId = jellyfinApi.userId ?: return@withContext emptyList()
+            val favorites = mutableListOf<FindroidItem>()
+            favorites +=
+                database.getMoviesByServerId(serverId).map { it.toFindroidMovie(database, userId) }
+                    .filter { it.favorite }
+            favorites +=
+                database.getShowsByServerId(serverId).map { it.toFindroidShow(database, userId) }
+                    .filter { it.favorite }
+            favorites +=
+                database.getEpisodesByServerId(serverId)
+                    .map { it.toFindroidEpisode(database, userId) }
+                    .filter { it.favorite }
+            favorites
+        }
     }
 
     override suspend fun getSearchItems(query: String): List<FindroidItem> {
@@ -325,5 +393,40 @@ class JellyfinRepositoryOfflineImpl(
 
     override fun getUserId(): UUID {
         return jellyfinApi.userId!!
+    }
+
+    private fun currentServerId(): String? {
+        return appPreferences.getValue(appPreferences.currentServer)
+    }
+
+    private fun currentBaseUrl(serverId: String): String {
+        return database.getServerCurrentAddress(serverId)?.address.orEmpty()
+    }
+
+    private fun sortCachedItems(
+        items: List<FindroidItem>,
+        sortBy: SortBy,
+        sortOrder: SortOrder,
+    ): List<FindroidItem> {
+        val sorted =
+            when (sortBy) {
+                SortBy.IMDB_RATING ->
+                    items.sortedByDescending { (it as? FindroidMovie)?.communityRating ?: 0f }
+                SortBy.PARENTAL_RATING ->
+                    items.sortedBy { (it as? FindroidMovie)?.officialRating.orEmpty() }
+                SortBy.DATE_PLAYED,
+                SortBy.SERIES_DATE_PLAYED ->
+                    items.sortedByDescending { it.playbackPositionTicks }
+                SortBy.DATE_ADDED -> items
+                SortBy.RELEASE_DATE ->
+                    items.sortedByDescending { (it as? FindroidMovie)?.productionYear ?: 0 }
+                else -> items.sortedBy { it.name.lowercase() }
+            }
+
+        return if (sortOrder == SortOrder.DESCENDING) {
+            sorted.reversed()
+        } else {
+            sorted
+        }
     }
 }

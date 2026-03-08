@@ -2,6 +2,7 @@ package dev.jdtech.jellyfin.ui
 
 import androidx.annotation.DrawableRes
 import androidx.annotation.StringRes
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -45,6 +46,8 @@ import androidx.tv.material3.TabDefaults
 import androidx.tv.material3.TabRow
 import androidx.tv.material3.TabRowDefaults
 import androidx.tv.material3.Text
+import dev.jdtech.jellyfin.cache.LibraryCacheState
+import dev.jdtech.jellyfin.cache.LibraryCacheStatus
 import dev.jdtech.jellyfin.core.R as CoreR
 import dev.jdtech.jellyfin.core.presentation.dummy.dummyServer
 import dev.jdtech.jellyfin.core.presentation.dummy.dummyUser
@@ -76,11 +79,13 @@ fun MainScreen(
     mainViewModel: MainViewModel = hiltViewModel(),
 ) {
     val delegatedUiState by mainViewModel.uiState.collectAsStateWithLifecycle()
+    val libraryCacheStatus by mainViewModel.libraryCacheStatus.collectAsStateWithLifecycle()
 
     LaunchedEffect(true) { mainViewModel.loadServerAndUser() }
 
     MainScreenLayout(
         uiState = delegatedUiState,
+        libraryCacheStatus = libraryCacheStatus,
         navigateToSettings = navigateToSettings,
         navigateToCollection = navigateToCollection,
         navigateToLibrary = navigateToLibrary,
@@ -101,6 +106,7 @@ enum class TabDestination(@param:DrawableRes val icon: Int, @param:StringRes val
 @Composable
 private fun MainScreenLayout(
     uiState: MainViewModel.UiState,
+    libraryCacheStatus: LibraryCacheStatus,
     navigateToSettings: () -> Unit,
     navigateToCollection: (collectionId: UUID, collectionName: String) -> Unit,
     navigateToLibrary: (libraryId: UUID, libraryName: String, libraryType: CollectionType) -> Unit,
@@ -172,12 +178,19 @@ private fun MainScreenLayout(
                     .height(80.dp)
                     .padding(horizontal = MaterialTheme.spacings.default)
         ) {
-            Icon(
-                painter = painterResource(id = CoreR.drawable.ic_logo),
-                contentDescription = null,
-                tint = Color.Unspecified,
-                modifier = Modifier.size(32.dp).align(Alignment.CenterStart),
-            )
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(MaterialTheme.spacings.small),
+                modifier = Modifier.align(Alignment.CenterStart),
+            ) {
+                Icon(
+                    painter = painterResource(id = CoreR.drawable.ic_logo),
+                    contentDescription = null,
+                    tint = Color.Unspecified,
+                    modifier = Modifier.size(32.dp),
+                )
+                CacheStatusChip(status = libraryCacheStatus)
+            }
             TabRow(
                 selectedTabIndex = focusedTabIndex,
                 indicator = { tabPositions, isActivated ->
@@ -304,6 +317,55 @@ private fun MainScreenLayout(
     }
 }
 
+@Composable
+private fun CacheStatusChip(status: LibraryCacheStatus) {
+    val (iconRes, tintColor, labelRes) =
+        when (status.state) {
+            LibraryCacheState.SYNCING ->
+                Triple(CoreR.drawable.ic_database, MaterialTheme.colorScheme.primary, CoreR.string.cache_status_syncing)
+            LibraryCacheState.READY ->
+                Triple(CoreR.drawable.ic_check, MaterialTheme.colorScheme.primary, CoreR.string.cache_status_ready)
+            LibraryCacheState.ERROR ->
+                Triple(CoreR.drawable.ic_alert_circle, MaterialTheme.colorScheme.error, CoreR.string.cache_status_error)
+            LibraryCacheState.IDLE ->
+                Triple(CoreR.drawable.ic_database, MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f), CoreR.string.cache_status_idle)
+        }
+    val subtitle =
+        if (status.state == LibraryCacheState.READY && status.lastSuccessAtMs > 0L) {
+            android.text.format.DateUtils.getRelativeTimeSpanString(
+                    status.lastSuccessAtMs,
+                    System.currentTimeMillis(),
+                    android.text.format.DateUtils.MINUTE_IN_MILLIS,
+                    android.text.format.DateUtils.FORMAT_ABBREV_RELATIVE,
+                )
+                .toString()
+        } else {
+            stringResource(labelRes)
+        }
+
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+        modifier =
+            Modifier.background(
+                color = MaterialTheme.colorScheme.surface.copy(alpha = 0.62f),
+                shape = MaterialTheme.shapes.small,
+            ).padding(horizontal = 10.dp, vertical = 6.dp),
+    ) {
+        Icon(
+            painter = painterResource(iconRes),
+            contentDescription = stringResource(labelRes),
+            tint = tintColor,
+            modifier = Modifier.size(14.dp),
+        )
+        Text(
+            text = subtitle,
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.88f),
+        )
+    }
+}
+
 private fun isDownNavigationKey(keyEvent: androidx.compose.ui.input.key.KeyEvent): Boolean {
     return keyEvent.nativeKeyEvent.action == android.view.KeyEvent.ACTION_DOWN &&
         (
@@ -319,6 +381,7 @@ private fun MainScreenLayoutPreview() {
     FindroidTheme {
         MainScreenLayout(
             uiState = MainViewModel.UiState.Normal(server = dummyServer, user = dummyUser),
+            libraryCacheStatus = LibraryCacheStatus(),
             navigateToSettings = {},
             navigateToCollection = { _, _ -> },
             navigateToLibrary = { _, _, _ -> },

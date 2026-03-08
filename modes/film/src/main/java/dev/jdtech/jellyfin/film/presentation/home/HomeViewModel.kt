@@ -11,6 +11,7 @@ import dev.jdtech.jellyfin.models.HomeItem
 import dev.jdtech.jellyfin.models.HomeSection
 import dev.jdtech.jellyfin.models.UiText
 import dev.jdtech.jellyfin.repository.JellyfinRepository
+import dev.jdtech.jellyfin.repository.JellyfinRepositoryOfflineImpl
 import dev.jdtech.jellyfin.settings.domain.AppPreferences
 import dev.jdtech.jellyfin.utils.toView
 import java.util.UUID
@@ -34,6 +35,7 @@ class HomeViewModel
 @Inject
 constructor(
     val repository: JellyfinRepository,
+    val offlineRepository: JellyfinRepositoryOfflineImpl,
     val appPreferences: AppPreferences,
     val database: ServerDatabaseDao,
 ) : ViewModel() {
@@ -63,6 +65,25 @@ constructor(
                     appPreferences.getValue(appPreferences.homeLibrariesFirstRow)
                 val currentServer = appPreferences.getValue(appPreferences.currentServer)
                 val newServer = currentServer?.let { serverId -> database.get(serverId) }
+                val cachedLibraries =
+                    runCatching { offlineRepository.getLibraries() }.getOrDefault(emptyList())
+                val cachedResumeSection =
+                    runCatching { loadCachedResumeItemsData() }.getOrNull()
+                val cachedNextUpSection =
+                    runCatching { loadCachedNextUpItemsData() }.getOrNull()
+
+                _state.update {
+                    it.copy(
+                        server = newServer,
+                        libraries =
+                            if (cachedLibraries.isNotEmpty()) cachedLibraries else it.libraries,
+                        resumeSection = cachedResumeSection ?: it.resumeSection,
+                        nextUpSection = cachedNextUpSection ?: it.nextUpSection,
+                        showLibrariesFirstRow = showLibrariesFirstRow,
+                        isLoading = true,
+                        error = null,
+                    )
+                }
 
                 val (libraries, suggestionsSection, resumeSection, nextUpSection, supportedViews) =
                     coroutineScope {
@@ -185,12 +206,40 @@ constructor(
         }
     }
 
+    private suspend fun loadCachedResumeItemsData(): HomeItem.Section? {
+        if (!appPreferences.getValue(appPreferences.homeContinueWatching)) {
+            return null
+        }
+
+        val resumeItems = offlineRepository.getResumeItems()
+
+        return if (resumeItems.isEmpty()) {
+            null
+        } else {
+            HomeItem.Section(HomeSection(uuidContinueWatching, uiTextContinueWatching, resumeItems))
+        }
+    }
+
     private suspend fun loadNextUpItemsData(): HomeItem.Section? {
         if (!appPreferences.getValue(appPreferences.homeNextUp)) {
             return null
         }
 
         val nextUpItems = repository.getNextUp()
+
+        return if (nextUpItems.isEmpty()) {
+            null
+        } else {
+            HomeItem.Section(HomeSection(uuidNextUp, uiTextNextUp, nextUpItems))
+        }
+    }
+
+    private suspend fun loadCachedNextUpItemsData(): HomeItem.Section? {
+        if (!appPreferences.getValue(appPreferences.homeNextUp)) {
+            return null
+        }
+
+        val nextUpItems = offlineRepository.getNextUp()
 
         return if (nextUpItems.isEmpty()) {
             null

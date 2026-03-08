@@ -1,6 +1,9 @@
 package dev.jdtech.jellyfin.ui
 
+import android.content.Context
 import android.media.audiofx.LoudnessEnhancer
+import android.net.ConnectivityManager
+import android.net.NetworkCapabilities
 import android.net.TrafficStats
 import android.os.Process
 import android.widget.Toast
@@ -146,6 +149,7 @@ fun PlayerScreen(
     var bufferedPosition by remember { mutableLongStateOf(0L) }
     var playbackState by remember { mutableStateOf(Player.STATE_IDLE) }
     var networkSpeedBps by remember { mutableLongStateOf(0L) }
+    var isNetworkConnected by remember { mutableStateOf(true) }
     var audioDetails by remember { mutableStateOf("Audio: --") }
     var videoDetails by remember { mutableStateOf("Video: --") }
     var playbackKind by remember { mutableStateOf<PlaybackKind?>(null) }
@@ -220,6 +224,41 @@ fun PlayerScreen(
         onDispose {
             loudnessEnhancerState.value?.release()
             loudnessEnhancerState.value = null
+        }
+    }
+
+    val connectivityManager =
+        remember(context) {
+            context.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager
+        }
+
+    DisposableEffect(connectivityManager) {
+        if (connectivityManager == null) {
+            isNetworkConnected = false
+            onDispose {}
+        } else {
+            val callback =
+                object : ConnectivityManager.NetworkCallback() {
+                    override fun onAvailable(network: android.net.Network) {
+                        isNetworkConnected = connectivityManager.hasActiveConnection()
+                    }
+
+                    override fun onLost(network: android.net.Network) {
+                        isNetworkConnected = connectivityManager.hasActiveConnection()
+                    }
+
+                    override fun onCapabilitiesChanged(
+                        network: android.net.Network,
+                        networkCapabilities: NetworkCapabilities,
+                    ) {
+                        isNetworkConnected = connectivityManager.hasActiveConnection()
+                    }
+                }
+
+            isNetworkConnected = connectivityManager.hasActiveConnection()
+            runCatching { connectivityManager.registerDefaultNetworkCallback(callback) }
+
+            onDispose { runCatching { connectivityManager.unregisterNetworkCallback(callback) } }
         }
     }
 
@@ -412,10 +451,9 @@ fun PlayerScreen(
             },
             modifier = Modifier.fillMaxSize(),
         )
-        Text(
-            text = formatBitrate(networkSpeedBps),
-            style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.85f),
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
             modifier =
                 Modifier.align(Alignment.TopEnd)
                     .padding(
@@ -427,7 +465,34 @@ fun PlayerScreen(
                         shape = RoundedCornerShape(8.dp),
                     )
                     .padding(horizontal = 8.dp, vertical = 4.dp),
-        )
+        ) {
+            Icon(
+                painter =
+                    painterResource(
+                        if (isNetworkConnected) R.drawable.ic_server else R.drawable.ic_server_off
+                    ),
+                contentDescription =
+                    stringResource(
+                        if (isNetworkConnected) {
+                            R.string.network_connected
+                        } else {
+                            R.string.network_disconnected
+                        }
+                    ),
+                tint =
+                    if (isNetworkConnected) {
+                        MaterialTheme.colorScheme.primary
+                    } else {
+                        MaterialTheme.colorScheme.error
+                    },
+                modifier = Modifier.size(12.dp),
+            )
+            Text(
+                text = formatBitrate(networkSpeedBps),
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.85f),
+            )
+        }
         val isAudioOnlyContent = !hasSelectedMotionVideoTrack(viewModel.player)
         if (isAudioOnlyContent && !videoPlayerState.controlsVisible) {
             AudioNowPlayingOverlay(
@@ -1354,6 +1419,11 @@ private fun formatBitrate(bitsPerSecond: Long): String {
     if (bitsPerSecond <= 0) return "0 Mbps"
     val mbps = bitsPerSecond.toDouble() / 1_000_000.0
     return String.format(Locale.US, "%.2f Mbps", mbps)
+}
+
+private fun ConnectivityManager.hasActiveConnection(): Boolean {
+    val capabilities = getNetworkCapabilities(activeNetwork) ?: return false
+    return capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
 }
 
 private const val AUDIO_GAIN_MIN_MB = 0

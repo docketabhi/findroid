@@ -4,6 +4,7 @@ import androidx.room.Entity
 import androidx.room.PrimaryKey
 import java.time.LocalDateTime
 import java.util.UUID
+import org.jellyfin.sdk.model.api.BaseItemDto
 
 @Entity(tableName = "shows")
 data class FindroidShowDto(
@@ -31,6 +32,22 @@ fun FindroidShow.toFindroidShowDto(serverId: String? = null): FindroidShowDto {
         communityRating = communityRating,
         officialRating = officialRating,
         status = status,
+        productionYear = productionYear,
+        endDate = endDate,
+    )
+}
+
+fun BaseItemDto.toFindroidShowDto(serverId: String? = null): FindroidShowDto {
+    return FindroidShowDto(
+        id = id,
+        serverId = serverId,
+        name = name.orEmpty(),
+        originalTitle = originalTitle,
+        overview = overview.orEmpty(),
+        runtimeTicks = runTimeTicks ?: 0L,
+        communityRating = communityRating,
+        officialRating = officialRating,
+        status = status ?: "Ended",
         productionYear = productionYear,
         endDate = endDate,
     )
