@@ -83,6 +83,8 @@ import dev.jdtech.jellyfin.ui.components.player.VideoPlayerOverlay
 import dev.jdtech.jellyfin.ui.components.player.VideoPlayerSeekBar
 import dev.jdtech.jellyfin.ui.components.player.VideoPlayerState
 import dev.jdtech.jellyfin.ui.components.player.rememberVideoPlayerState
+import dev.jdtech.jellyfin.utils.PlaybackKind
+import dev.jdtech.jellyfin.utils.inferPlaybackKind
 import java.util.Locale
 import java.util.UUID
 import kotlin.math.roundToInt
@@ -146,6 +148,7 @@ fun PlayerScreen(
     var networkSpeedBps by remember { mutableLongStateOf(0L) }
     var audioDetails by remember { mutableStateOf("Audio: --") }
     var videoDetails by remember { mutableStateOf("Video: --") }
+    var playbackKind by remember { mutableStateOf<PlaybackKind?>(null) }
     var audioGainMb by remember { mutableIntStateOf(AUDIO_GAIN_MIN_MB) }
     var autoGainEnabled by remember { mutableStateOf(true) }
     var autoGainTargetMb by remember { mutableIntStateOf(AUDIO_GAIN_MIN_MB) }
@@ -192,6 +195,10 @@ fun PlayerScreen(
         val (audioInfo, videoInfo) = getSelectedTrackDetails(viewModel.player)
         audioDetails = audioInfo
         videoDetails = videoInfo
+        playbackKind =
+            inferPlaybackKind(
+                path = viewModel.player.currentMediaItem?.localConfiguration?.uri?.toString(),
+            )
 
         val autoGainRecommendation = getSelectedAudioGainRecommendation(viewModel.player)
         if (autoGainRecommendation != null) {
@@ -452,6 +459,7 @@ fun PlayerScreen(
                     audioGainMb = audioGainMb,
                     autoGainEnabled = autoGainEnabled,
                     autoGainTargetMb = autoGainTargetMb,
+                    playbackKind = playbackKind,
                     videoDetails = videoDetails,
                     player = viewModel.player,
                     state = videoPlayerState,
@@ -482,6 +490,7 @@ fun VideoPlayerControls(
     audioGainMb: Int,
     autoGainEnabled: Boolean,
     autoGainTargetMb: Int,
+    playbackKind: PlaybackKind?,
     videoDetails: String,
     player: Player,
     state: VideoPlayerState,
@@ -546,6 +555,9 @@ fun VideoPlayerControls(
             horizontalArrangement = Arrangement.spacedBy(infoChipSpacing),
             verticalAlignment = Alignment.CenterVertically,
         ) {
+            playbackKind?.let {
+                PlayerInfoChip(text = stringResource(id = it.labelRes), compact = isAudioOnlyContent)
+            }
             if (!isAudioOnlyContent && videoDetails != "Video: --") {
                 PlayerInfoChip(text = videoDetails, compact = isAudioOnlyContent)
             }

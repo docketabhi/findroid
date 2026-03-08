@@ -8,12 +8,15 @@ import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
@@ -21,6 +24,7 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import dev.jdtech.jellyfin.core.R as CoreR
@@ -47,16 +51,21 @@ fun CollectionScreen(
     viewModel: CollectionViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
+    var preferredItemId by rememberSaveable { mutableStateOf<String?>(null) }
 
     LaunchedEffect(true) { viewModel.loadItems(collectionId) }
 
     CollectionScreenLayout(
         collectionName = collectionName,
         state = state,
+        preferredItemId = preferredItemId?.let(UUID::fromString),
         onRetry = { viewModel.loadItems(collectionId) },
         onAction = { action ->
             when (action) {
-                is CollectionAction.OnItemClick -> onItemClick(action.item)
+                is CollectionAction.OnItemClick -> {
+                    preferredItemId = action.item.id.toString()
+                    onItemClick(action.item)
+                }
                 is CollectionAction.OnBackClick -> Unit
             }
         },
@@ -68,12 +77,21 @@ internal fun CollectionScreenLayout(
     collectionName: String,
     state: CollectionState,
     firstContentFocusRequester: FocusRequester? = null,
+    preferredItemId: UUID? = null,
     onRetry: (() -> Unit)? = null,
     onAction: (CollectionAction) -> Unit,
 ) {
     val focusRequester = firstContentFocusRequester ?: remember { FocusRequester() }
-    val firstItemId =
-        state.sections.asSequence().flatMap { section -> section.items.asSequence() }.firstOrNull()?.id
+    val gridState = rememberLazyGridState()
+    val targetItemId =
+        if (
+            preferredItemId != null &&
+                state.sections.any { section -> section.items.any { it.id == preferredItemId } }
+        ) {
+            preferredItemId
+        } else {
+            state.sections.asSequence().flatMap { section -> section.items.asSequence() }.firstOrNull()?.id
+        }
 
     Box(modifier = Modifier.fillMaxSize()) {
         if (state.isLoading) {
@@ -99,6 +117,7 @@ internal fun CollectionScreenLayout(
                         vertical = MaterialTheme.spacings.large,
                     ),
                 modifier = Modifier.fillMaxSize(),
+                state = gridState,
             ) {
                 item(span = { GridItemSpan(this.maxLineSpan) }) {
                     Text(text = collectionName, style = MaterialTheme.typography.displayMedium)
@@ -133,7 +152,7 @@ internal fun CollectionScreenLayout(
                                 },
                             onClick = { onAction(CollectionAction.OnItemClick(item)) },
                             surfaceModifier =
-                                if (item.id == firstItemId) {
+                                if (item.id == targetItemId) {
                                     Modifier.focusRequester(focusRequester)
                                 } else {
                                     Modifier
@@ -144,8 +163,10 @@ internal fun CollectionScreenLayout(
                 }
             }
 
-            LaunchedEffect(firstItemId) {
-                if (firstItemId != null) {
+            LaunchedEffect(targetItemId, state.sections) {
+                val targetIndex = findCollectionGridIndex(state, targetItemId)
+                if (targetIndex != null) {
+                    gridState.scrollToItem(targetIndex)
                     runCatching { focusRequester.requestFocus() }
                 }
             }
@@ -156,6 +177,22 @@ internal fun CollectionScreenLayout(
 private const val COLLECTION_GRID_COLUMNS = 6
 private const val COLLECTION_VERTICAL_CARD_WIDTH_DP = 116
 private const val COLLECTION_HORIZONTAL_CARD_WIDTH_DP = 170
+
+private fun findCollectionGridIndex(state: CollectionState, itemId: UUID?): Int? {
+    if (itemId == null) return null
+
+    var gridIndex = 1 // collection title
+    state.sections.forEach { section ->
+        gridIndex += 1 // section title
+        val sectionItemIndex = section.items.indexOfFirst { it.id == itemId }
+        if (sectionItemIndex >= 0) {
+            return gridIndex + sectionItemIndex
+        }
+        gridIndex += section.items.size
+    }
+
+    return null
+}
 
 @Preview(device = "id:tv_1080p")
 @Composable

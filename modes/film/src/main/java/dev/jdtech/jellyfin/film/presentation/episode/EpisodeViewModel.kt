@@ -4,10 +4,12 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dev.jdtech.jellyfin.film.domain.VideoMetadataParser
+import dev.jdtech.jellyfin.models.FindroidSourceType
 import dev.jdtech.jellyfin.models.FindroidEpisode
 import dev.jdtech.jellyfin.models.FindroidItemPerson
 import dev.jdtech.jellyfin.repository.JellyfinRepository
 import dev.jdtech.jellyfin.settings.domain.AppPreferences
+import dev.jdtech.jellyfin.utils.inferPlaybackKind
 import java.util.UUID
 import javax.inject.Inject
 import kotlinx.coroutines.Dispatchers
@@ -35,13 +37,28 @@ constructor(
         viewModelScope.launch {
             try {
                 val episode = repository.getEpisode(episodeId)
-                val videoMetadata = videoMetadataParser.parse(episode.sources.first())
+                val playbackSources =
+                    runCatching { repository.getMediaSources(episodeId, includePath = true) }
+                        .getOrDefault(episode.sources)
+                val primarySource =
+                    playbackSources.firstOrNull { it.type == FindroidSourceType.LOCAL }
+                        ?: playbackSources.firstOrNull()
+                        ?: episode.sources.firstOrNull()
+                val videoMetadata = primarySource?.let { videoMetadataParser.parse(it) }
+                val playbackKind =
+                    primarySource?.let { source ->
+                        inferPlaybackKind(
+                            path = source.path,
+                            isLocalSource = source.type == FindroidSourceType.LOCAL,
+                        )
+                    }
                 val actors = getActors(episode)
                 val displayExtraInfo = appPreferences.getValue(appPreferences.displayExtraInfo)
                 _state.emit(
                     _state.value.copy(
                         episode = episode,
                         videoMetadata = videoMetadata,
+                        playbackKind = playbackKind,
                         actors = actors,
                         displayExtraInfo = displayExtraInfo,
                     )

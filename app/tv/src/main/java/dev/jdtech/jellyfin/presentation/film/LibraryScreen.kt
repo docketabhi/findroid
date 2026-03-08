@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -71,6 +72,7 @@ fun LibraryScreen(
     val state by viewModel.state.collectAsState()
 
     var initialLoad by rememberSaveable { mutableStateOf(true) }
+    var preferredFocusItemId by rememberSaveable { mutableStateOf<String?>(null) }
 
     LaunchedEffect(true) {
         viewModel.setup(parentId = libraryId, libraryType = libraryType)
@@ -84,10 +86,12 @@ fun LibraryScreen(
         libraryName = libraryName,
         libraryType = libraryType,
         state = state,
+        preferredFocusItemId = preferredFocusItemId?.let(UUID::fromString),
         onRetry = { viewModel.loadItems() },
         onAction = { action ->
             when (action) {
                 is LibraryAction.OnItemClick -> {
+                    preferredFocusItemId = action.item.id.toString()
                     when (action.item) {
                         is FindroidMovie -> {
                             val movieItem = action.item as FindroidMovie
@@ -118,10 +122,12 @@ private fun LibraryScreenLayout(
     libraryName: String,
     libraryType: CollectionType,
     state: LibraryState,
+    preferredFocusItemId: UUID? = null,
     onRetry: () -> Unit,
     onAction: (LibraryAction) -> Unit,
 ) {
     val focusRequester = remember { FocusRequester() }
+    val gridState = rememberLazyGridState()
 
     val items = state.items.collectAsLazyPagingItems()
     val isMusicLibrary = libraryType == CollectionType.Music
@@ -141,13 +147,24 @@ private fun LibraryScreenLayout(
 
     var showSortByDialog by remember { mutableStateOf(false) }
     val refreshError = items.loadState.refresh as? LoadState.Error
+    val targetItemId =
+        if (
+            preferredFocusItemId != null &&
+                items.itemSnapshotList.items.any { it.id == preferredFocusItemId }
+        ) {
+            preferredFocusItemId
+        } else {
+            items.itemSnapshotList.items.firstOrNull()?.id
+        }
+    val headerItemCount = if (isMusicLibrary) 2 else 1
 
     LazyVerticalGrid(
         columns = GridCells.Fixed(if (isMusicLibrary) 1 else NON_MUSIC_LIBRARY_GRID_COLUMNS),
         horizontalArrangement = Arrangement.spacedBy(gridSpacing),
         verticalArrangement = Arrangement.spacedBy(gridSpacing),
         contentPadding = gridContentPadding,
-        modifier = Modifier.fillMaxSize().focusRequester(focusRequester),
+        modifier = Modifier.fillMaxSize(),
+        state = gridState,
     ) {
         item(span = { GridItemSpan(this.maxLineSpan) }) {
             Row(
@@ -211,7 +228,14 @@ private fun LibraryScreenLayout(
                         index = i,
                         item = item,
                         onClick = { onAction(LibraryAction.OnItemClick(item)) },
-                        modifier = Modifier.animateItem(),
+                        modifier =
+                            Modifier.animateItem().then(
+                                if (item.id == targetItemId) {
+                                    Modifier.focusRequester(focusRequester)
+                                } else {
+                                    Modifier
+                                }
+                            ),
                     )
                 } else {
                     ItemCard(
@@ -219,6 +243,12 @@ private fun LibraryScreenLayout(
                         direction = Direction.VERTICAL,
                         cardWidthDp = LIBRARY_CARD_WIDTH_DP,
                         onClick = { onAction(LibraryAction.OnItemClick(item)) },
+                        surfaceModifier =
+                            if (item.id == targetItemId) {
+                                Modifier.focusRequester(focusRequester)
+                            } else {
+                                Modifier
+                            },
                         modifier = Modifier.animateItem(),
                     )
                 }
@@ -237,8 +267,12 @@ private fun LibraryScreenLayout(
         )
     }
 
-    LaunchedEffect(items.itemCount > 0) {
-        if (items.itemCount > 0) {
+    LaunchedEffect(targetItemId, items.itemCount) {
+        if (targetItemId != null) {
+            val targetIndex = items.itemSnapshotList.items.indexOfFirst { it.id == targetItemId }
+            if (targetIndex >= 0) {
+                gridState.scrollToItem(targetIndex + headerItemCount)
+            }
             focusRequester.requestFocus()
         }
     }

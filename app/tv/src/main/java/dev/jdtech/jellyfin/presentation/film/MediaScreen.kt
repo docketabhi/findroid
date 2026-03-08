@@ -10,7 +10,10 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
@@ -39,6 +42,7 @@ fun MediaScreen(
     viewModel: MediaViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsState()
+    var preferredLibraryId by rememberSaveable { mutableStateOf<String?>(null) }
 
     LaunchedEffect(true) { viewModel.loadData() }
 
@@ -47,9 +51,11 @@ fun MediaScreen(
     LibrariesScreenLayout(
         state = state,
         firstContentFocusRequester = firstContentFocusRequester,
+        preferredLibraryId = preferredLibraryId?.let(UUID::fromString),
         onAction = { action ->
             when (action) {
                 is MediaAction.OnItemClick -> {
+                    preferredLibraryId = action.item.id.toString()
                     navigateToLibrary(action.item.id, action.item.name, action.item.type)
                 }
                 else -> Unit
@@ -64,11 +70,18 @@ private fun LibrariesScreenLayout(
     state: MediaState,
     onAction: (MediaAction) -> Unit,
     firstContentFocusRequester: FocusRequester? = null,
+    preferredLibraryId: UUID? = null,
 ) {
     val focusRequester = firstContentFocusRequester ?: remember { FocusRequester() }
+    val targetLibraryId =
+        if (preferredLibraryId != null && state.libraries.any { it.id == preferredLibraryId }) {
+            preferredLibraryId
+        } else {
+            state.libraries.firstOrNull()?.id
+        }
 
-    LaunchedEffect(state.libraries) {
-        if (state.libraries.isNotEmpty()) {
+    LaunchedEffect(targetLibraryId, state.libraries.size) {
+        if (targetLibraryId != null) {
             runCatching { focusRequester.requestFocus() }
         }
     }
@@ -105,7 +118,7 @@ private fun LibrariesScreenLayout(
                 cardWidthDp = LIBRARIES_CARD_WIDTH_DP,
                 onClick = { onAction(MediaAction.OnItemClick(library)) },
                 surfaceModifier =
-                    if (index == 0) {
+                    if ((targetLibraryId == null && index == 0) || library.id == targetLibraryId) {
                         Modifier.focusRequester(focusRequester)
                     } else {
                         Modifier

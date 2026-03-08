@@ -4,10 +4,12 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dev.jdtech.jellyfin.film.domain.VideoMetadataParser
+import dev.jdtech.jellyfin.models.FindroidSourceType
 import dev.jdtech.jellyfin.models.FindroidItemPerson
 import dev.jdtech.jellyfin.models.FindroidMovie
 import dev.jdtech.jellyfin.repository.JellyfinRepository
 import dev.jdtech.jellyfin.settings.domain.AppPreferences
+import dev.jdtech.jellyfin.utils.inferPlaybackKind
 import java.util.UUID
 import javax.inject.Inject
 import kotlinx.coroutines.Dispatchers
@@ -35,7 +37,21 @@ constructor(
         viewModelScope.launch {
             try {
                 val movie = repository.getMovie(movieId)
-                val videoMetadata = videoMetadataParser.parse(movie.sources.first())
+                val playbackSources =
+                    runCatching { repository.getMediaSources(movieId, includePath = true) }
+                        .getOrDefault(movie.sources)
+                val primarySource =
+                    playbackSources.firstOrNull { it.type == FindroidSourceType.LOCAL }
+                        ?: playbackSources.firstOrNull()
+                        ?: movie.sources.firstOrNull()
+                val videoMetadata = primarySource?.let { videoMetadataParser.parse(it) }
+                val playbackKind =
+                    primarySource?.let { source ->
+                        inferPlaybackKind(
+                            path = source.path,
+                            isLocalSource = source.type == FindroidSourceType.LOCAL,
+                        )
+                    }
                 val actors = getActors(movie)
                 val director = getDirector(movie)
                 val writers = getWriters(movie)
@@ -44,6 +60,7 @@ constructor(
                     _state.value.copy(
                         movie = movie,
                         videoMetadata = videoMetadata,
+                        playbackKind = playbackKind,
                         actors = actors,
                         director = director,
                         writers = writers,

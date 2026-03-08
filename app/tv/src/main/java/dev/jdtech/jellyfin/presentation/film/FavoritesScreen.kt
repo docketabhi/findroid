@@ -3,6 +3,9 @@ package dev.jdtech.jellyfin.presentation.film
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
@@ -25,6 +28,7 @@ fun FavoritesScreen(
     viewModel: FavoritesViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
+    var preferredItemId by rememberSaveable { mutableStateOf<String?>(null) }
 
     LaunchedEffect(true) { viewModel.loadItems() }
 
@@ -32,10 +36,14 @@ fun FavoritesScreen(
         collectionName = stringResource(CoreR.string.title_favorite),
         state = state,
         firstContentFocusRequester = firstContentFocusRequester,
+        preferredItemId = preferredItemId?.let(java.util.UUID::fromString),
         onRetry = { viewModel.loadItems() },
         onAction = { action ->
             when (action) {
-                is CollectionAction.OnItemClick -> onItemClick(action.item)
+                is CollectionAction.OnItemClick -> {
+                    preferredItemId = action.item.id.toString()
+                    onItemClick(action.item)
+                }
                 is CollectionAction.OnBackClick -> Unit
             }
         },

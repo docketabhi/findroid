@@ -51,6 +51,8 @@ import dev.jdtech.jellyfin.film.presentation.episode.EpisodeState
 import dev.jdtech.jellyfin.film.presentation.episode.EpisodeViewModel
 import dev.jdtech.jellyfin.presentation.theme.FindroidTheme
 import dev.jdtech.jellyfin.presentation.theme.spacings
+import dev.jdtech.jellyfin.ui.components.ExtraInfoText
+import dev.jdtech.jellyfin.ui.components.VideoMetadataBar
 import dev.jdtech.jellyfin.utils.format
 import java.util.UUID
 
@@ -182,6 +184,14 @@ private fun EpisodeScreenLayout(state: EpisodeState, onAction: (EpisodeAction) -
                         }
                     }
                     Spacer(modifier = Modifier.height(MaterialTheme.spacings.medium))
+                    state.videoMetadata?.let { videoMetadata ->
+                        VideoMetadataBar(
+                            videoMetadata = videoMetadata,
+                            playbackKind = state.playbackKind,
+                            modifier = Modifier.width(760.dp),
+                        )
+                        Spacer(modifier = Modifier.height(MaterialTheme.spacings.medium))
+                    }
                     Text(
                         text = episode.overview,
                         style = MaterialTheme.typography.bodyMedium,
@@ -260,6 +270,15 @@ private fun EpisodeScreenLayout(state: EpisodeState, onAction: (EpisodeAction) -
                                                 CoreR.string.remove_from_favorites
                                             else CoreR.string.add_to_favorites
                                     )
+                            )
+                        }
+                    }
+                    if (state.displayExtraInfo) {
+                        state.videoMetadata?.let { videoMetadata ->
+                            Spacer(modifier = Modifier.height(MaterialTheme.spacings.default))
+                            ExtraInfoText(
+                                videoMetadata = videoMetadata,
+                                modifier = Modifier.width(760.dp),
                             )
                         }
                     }

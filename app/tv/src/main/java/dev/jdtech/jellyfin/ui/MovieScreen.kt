@@ -52,6 +52,8 @@ import dev.jdtech.jellyfin.film.presentation.movie.MovieState
 import dev.jdtech.jellyfin.film.presentation.movie.MovieViewModel
 import dev.jdtech.jellyfin.presentation.theme.FindroidTheme
 import dev.jdtech.jellyfin.presentation.theme.spacings
+import dev.jdtech.jellyfin.ui.components.ExtraInfoText
+import dev.jdtech.jellyfin.ui.components.VideoMetadataBar
 import dev.jdtech.jellyfin.utils.format
 import java.util.UUID
 
@@ -165,6 +167,14 @@ private fun MovieScreenLayout(state: MovieState, onAction: (MovieAction) -> Unit
                         }
                     }
                     Spacer(modifier = Modifier.height(MaterialTheme.spacings.medium))
+                    state.videoMetadata?.let { videoMetadata ->
+                        VideoMetadataBar(
+                            videoMetadata = videoMetadata,
+                            playbackKind = state.playbackKind,
+                            modifier = Modifier.width(760.dp),
+                        )
+                        Spacer(modifier = Modifier.height(MaterialTheme.spacings.medium))
+                    }
                     Text(
                         text = movie.overview,
                         style = MaterialTheme.typography.bodyMedium,
@@ -250,6 +260,15 @@ private fun MovieScreenLayout(state: MovieState, onAction: (MovieAction) -> Unit
                         }
                     }
                     Spacer(modifier = Modifier.height(MaterialTheme.spacings.default))
+                    if (state.displayExtraInfo) {
+                        state.videoMetadata?.let { videoMetadata ->
+                            ExtraInfoText(
+                                videoMetadata = videoMetadata,
+                                modifier = Modifier.width(760.dp),
+                            )
+                            Spacer(modifier = Modifier.height(MaterialTheme.spacings.default))
+                        }
+                    }
                     Row(
                         horizontalArrangement = Arrangement.spacedBy(MaterialTheme.spacings.large)
                     ) {

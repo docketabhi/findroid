@@ -96,6 +96,11 @@
     <string name="player_audio_gain_label">Audio Gain: %1$s</string>
     <string name="player_auto_gain_on">Auto Gain: ON (%1$s)</string>
     <string name="player_auto_gain_off">Auto Gain: OFF (manual)</string>
+    <string name="playback_local">Local</string>
+    <string name="playback_direct_play">Direct Play</string>
+    <string name="playback_direct_stream">Direct Stream</string>
+    <string name="playback_transcode">Transcoding</string>
+    <string name="playback_streaming">Streaming</string>
     <string name="player_now_playing">Now Playing</string>
     <string name="temp">temp</string>
     <string name="offline_mode">Offline Mode</string>
